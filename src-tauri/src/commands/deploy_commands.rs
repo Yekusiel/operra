@@ -156,15 +156,22 @@ Other Rules:
         .await
         .map_err(|e| e.to_string())?;
 
-    // Parse the response into files
+    // Parse the response into IaC files
     let infra_dir = PathBuf::from(&project.repo_path).join("infrastructure");
     std::fs::create_dir_all(&infra_dir)
         .map_err(|e| format!("Failed to create infrastructure directory: {}", e))?;
 
-    let files = parse_and_write_files(&response, &infra_dir)?;
+    let mut files = parse_and_write_files(&response, &infra_dir)?;
 
     if files.is_empty() {
         return Err("AI did not generate any infrastructure files. Try regenerating.".to_string());
+    }
+
+    // Generate CI/CD pipeline for GitHub source projects
+    if project.source_type == "github" {
+        if let Ok(cicd_file) = generate_cicd_config(&adapter, &project).await {
+            files.push(cicd_file);
+        }
     }
 
     Ok(IacGenerationResult {
@@ -226,6 +233,74 @@ fn write_iac_file(output_dir: &Path, filename: &str, content: &str) -> Result<()
             .map_err(|e| format!("Failed to write {}: {}", safe_name, e))?;
     }
     Ok(())
+}
+
+async fn generate_cicd_config(
+    adapter: &ClaudeCliAdapter,
+    project: &crate::models::project::Project,
+) -> Result<String, String> {
+    let repo = project.github_repo.as_deref().unwrap_or("");
+    let branch = project.github_branch.as_deref().unwrap_or("main");
+    let domain = project.domain.as_deref().unwrap_or("");
+
+    let prompt = format!(
+        r#"Generate a GitHub Actions deployment workflow for this project.
+
+Project: {name}
+GitHub Repo: {repo}
+Branch: {branch}
+Domain: {domain_info}
+
+The workflow should:
+1. Trigger on push to the {branch} branch
+2. SSH into the production server
+3. Pull the latest code from the repo
+4. Install dependencies
+5. Build the application
+6. Restart the application (via PM2 or systemd)
+
+The server's SSH private key and IP address should be stored as GitHub Secrets:
+- SSH_PRIVATE_KEY: the server's SSH private key
+- SERVER_IP: the server's static IP address
+- SSH_USER: ubuntu (or the default user)
+
+Output ONLY the raw YAML content. No markdown code fences, no explanations, no commentary.
+Start with "name:" and end with the last line of the YAML.
+"#,
+        name = project.name,
+        repo = repo,
+        branch = branch,
+        domain_info = if domain.is_empty() { "None".to_string() } else { domain.to_string() },
+    );
+
+    let response = adapter.invoke_plan(&prompt).await.map_err(|e| e.to_string())?;
+
+    // Strip any markdown fences the AI might add despite instructions
+    let yaml = response
+        .trim()
+        .trim_start_matches("```yaml")
+        .trim_start_matches("```yml")
+        .trim_start_matches("```")
+        .trim_end_matches("```")
+        .trim()
+        .to_string();
+
+    // Write to .github/workflows/deploy.yml relative to repo root
+    let repo_root = if project.source_type == "github" && !project.repo_path.is_empty() {
+        PathBuf::from(&project.repo_path)
+    } else {
+        PathBuf::from(&project.repo_path)
+    };
+
+    let workflows_dir = repo_root.join(".github").join("workflows");
+    std::fs::create_dir_all(&workflows_dir)
+        .map_err(|e| format!("Failed to create .github/workflows: {}", e))?;
+
+    let workflow_path = workflows_dir.join("deploy.yml");
+    std::fs::write(&workflow_path, &yaml)
+        .map_err(|e| format!("Failed to write deploy.yml: {}", e))?;
+
+    Ok(".github/workflows/deploy.yml".to_string())
 }
 
 // ── Deployment Commands ──
