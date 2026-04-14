@@ -479,9 +479,9 @@ fn build_chat_prompt(plan: &Plan, history: &[PlanMessage], new_message: &str, ne
 ## Plan {next_label}: [Short descriptive title]
 [Full description with AWS services, cost estimate, complexity, tradeoffs]
 
-This heading format is parsed automatically — the option will appear with its own approve button in the UI. The "## Plan" prefix and uppercase letter are required.
+This heading format is parsed automatically — the option will appear with its own approve button in the UI. The ## Plan prefix and uppercase letter are required.
 
-If the user asks questions or wants clarification, answer clearly WITHOUT creating a new plan section. Only use the "## Plan X:" format when presenting a genuinely new or revised infrastructure option. Keep using markdown formatting.
+If the user asks questions or wants clarification, answer clearly WITHOUT creating a new plan section. Only use the ## Plan X: format when presenting a genuinely new or revised infrastructure option. Keep using markdown formatting.
 "#));
 
     prompt
