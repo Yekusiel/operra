@@ -13,9 +13,14 @@ impl ClaudeCliAdapter {
     }
 
     pub fn default_path() -> Self {
-        Self {
-            cli_path: "claude".to_string(),
-        }
+        // On Windows, npm global installs create .cmd shims.
+        // Rust's Command::new needs the .cmd extension to find them.
+        let cli_path = if cfg!(windows) {
+            "claude.cmd".to_string()
+        } else {
+            "claude".to_string()
+        };
+        Self { cli_path }
     }
 
     /// Invoke Claude Code for plan generation specifically.
@@ -25,7 +30,7 @@ impl ClaudeCliAdapter {
         prompt: &str,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let output = Command::new(&self.cli_path)
-            .args(["--print", "--output-format", "text", "--verbose"])
+            .args(["--print", "--output-format", "text"])
             .arg(prompt)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -35,7 +40,7 @@ impl ClaudeCliAdapter {
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::NotFound {
                     format!(
-                        "Claude Code CLI not found at '{}'. Make sure Claude Code is installed and in your PATH.",
+                        "Claude Code CLI not found at '{}'. Make sure Claude Code is installed (npm install -g @anthropic-ai/claude-code) and the npm global bin directory is in your PATH.",
                         self.cli_path
                     )
                 } else {
