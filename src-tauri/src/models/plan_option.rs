@@ -163,11 +163,15 @@ pub fn parse_plan_options(text: &str) -> Vec<(String, String, String)> {
 fn extract_plan_header(line: &str) -> Option<(String, String)> {
     let trimmed = line.trim();
 
-    // Try "## Plan A: Title" or "### Plan A: Title"
+    // Strip markdown heading markers and bold markers
     let stripped = trimmed
         .trim_start_matches('#')
+        .trim()
+        .trim_start_matches("**")
+        .trim_end_matches("**")
         .trim();
 
+    // Match "Plan X: Title" or "Plan X - Title" where X is A-Z
     if !stripped.to_lowercase().starts_with("plan ") {
         return None;
     }
@@ -183,6 +187,8 @@ fn extract_plan_header(line: &str) -> Option<(String, String)> {
         .trim_start_matches(':')
         .trim_start_matches('-')
         .trim_start_matches('\u{2013}') // en-dash
+        .trim()
+        .trim_end_matches("**")
         .trim()
         .to_string();
 

@@ -378,15 +378,17 @@ pub async fn send_plan_message(
     plan_id: String,
     message: String,
 ) -> Result<PlanMessage, String> {
-    // Get plan and its conversation history
-    let (plan, history) = {
+    // Get plan, conversation history, and existing option count
+    let (plan, history, next_label) = {
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
         let plan = Plan::get_by_id(&conn, &plan_id)
             .map_err(|e| e.to_string())?
             .ok_or_else(|| format!("Plan not found: {}", plan_id))?;
         let history = PlanMessage::list_for_plan(&conn, &plan_id)
             .map_err(|e| e.to_string())?;
-        (plan, history)
+        let next_label = PlanOption::next_label(&conn, &plan_id)
+            .map_err(|e| e.to_string())?;
+        (plan, history, next_label)
     };
 
     // Save user message
@@ -397,7 +399,7 @@ pub async fn send_plan_message(
     }
 
     // Build the conversation prompt
-    let prompt = build_chat_prompt(&plan, &history, &message);
+    let prompt = build_chat_prompt(&plan, &history, &message, &next_label);
 
     // Invoke Claude
     let adapter = ClaudeCliAdapter::default_path();
@@ -448,7 +450,7 @@ pub async fn get_plan_messages(
     PlanMessage::list_for_plan(&conn, &plan_id).map_err(|e| e.to_string())
 }
 
-fn build_chat_prompt(plan: &Plan, history: &[PlanMessage], new_message: &str) -> String {
+fn build_chat_prompt(plan: &Plan, history: &[PlanMessage], new_message: &str, next_label: &str) -> String {
     let mut prompt = String::new();
 
     prompt.push_str("You are an AWS infrastructure architect continuing a conversation about an infrastructure plan you previously generated.\n\n");
@@ -472,15 +474,15 @@ fn build_chat_prompt(plan: &Plan, history: &[PlanMessage], new_message: &str) ->
     // The new user message
     prompt.push_str(&format!("## User's New Message\n\n{}\n\n", new_message));
 
-    prompt.push_str(r#"Respond helpfully. If the user asks to change a plan or suggests a new approach, present it as a new plan option using the format:
+    prompt.push_str(&format!(r#"Respond helpfully. If the user asks to change a plan or suggests a new approach, present it as a new plan option using EXACTLY this format:
 
-## Plan [next letter]: [Title]
-[Full description]
+## Plan {next_label}: [Short descriptive title]
+[Full description with AWS services, cost estimate, complexity, tradeoffs]
 
-This will automatically be detected and shown as a new approvable option in the UI.
+This heading format is parsed automatically — the option will appear with its own approve button in the UI. The "## Plan" prefix and uppercase letter are required.
 
-If the user asks questions or wants clarification, answer clearly without creating a new plan option. Keep using markdown formatting.
-"#);
+If the user asks questions or wants clarification, answer clearly WITHOUT creating a new plan section. Only use the "## Plan X:" format when presenting a genuinely new or revised infrastructure option. Keep using markdown formatting.
+"#));
 
     prompt
 }
