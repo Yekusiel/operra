@@ -16,7 +16,9 @@ import {
   Code2,
   Rocket,
   Shield,
-  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  RotateCcw,
 } from "lucide-react";
 import { TopBar } from "../components/layout/TopBar";
 import { ScanProgressIndicator } from "../components/scanner/ScanProgress";
@@ -48,6 +50,8 @@ export function ProjectDetailPage() {
   const [deployment, setDeployment] = useState<import("../lib/types").Deployment | null>(null);
   const [deployError, setDeployError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+
+  const [workflowOpen, setWorkflowOpen] = useState(true);
 
   const hasCompletedScan = scans?.some((s) => s.status === "completed");
   const hasCompletedQuestionnaire = questionnaire?.completed;
@@ -215,398 +219,346 @@ export function ProjectDetailPage() {
           </dl>
         </div>
 
-        {/* Workflow Steps */}
+        {/* Workflow */}
         <div className="card">
-          <h2 className="mb-4 text-sm font-semibold text-gray-900">
-            Infrastructure Workflow
-          </h2>
-          <div className="space-y-3">
-            {/* Step 1: Scan */}
-            <WorkflowStep
-              step={1}
-              title="Scan Repository"
-              description="Detect technologies, frameworks, and infrastructure patterns"
-              status={hasCompletedScan ? "completed" : scan.isPending ? "active" : "pending"}
-              action={
-                <button
-                  className="btn-primary text-xs px-3 py-1.5"
-                  onClick={() => scan.mutate()}
-                  disabled={scan.isPending}
-                >
-                  {scan.isPending ? (
-                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Scanning...</>
-                  ) : hasCompletedScan ? (
-                    <><Scan className="h-3.5 w-3.5" /> Re-scan</>
-                  ) : (
-                    <><Scan className="h-3.5 w-3.5" /> Scan</>
-                  )}
-                </button>
-              }
-            />
+          <button
+            className="flex w-full items-center justify-between"
+            onClick={() => setWorkflowOpen(!workflowOpen)}
+          >
+            <h2 className="text-sm font-semibold text-gray-900">
+              Infrastructure Workflow
+            </h2>
+            {workflowOpen ? (
+              <ChevronDown className="h-4 w-4 text-gray-400" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-gray-400" />
+            )}
+          </button>
 
-            {/* Step 2: Questionnaire */}
-            <WorkflowStep
-              step={2}
-              title="Architecture Questionnaire"
-              description="Answer questions about your infrastructure requirements"
-              status={hasCompletedQuestionnaire ? "completed" : "pending"}
-              disabled={!hasCompletedScan}
-              action={
-                <button
-                  className="btn-primary text-xs px-3 py-1.5"
-                  onClick={() => navigate(`/projects/${project.id}/questionnaire`)}
-                  disabled={!hasCompletedScan}
-                >
-                  <ClipboardList className="h-3.5 w-3.5" />
-                  {hasCompletedQuestionnaire ? "Edit Answers" : "Start"}
-                </button>
-              }
-            />
-
-            {/* Step 3: Generate & Approve Plan */}
-            <WorkflowStep
-              step={3}
-              title={hasPlanApproved ? "Plan Approved" : hasPlan ? "Review & Approve Plan" : "Generate Infrastructure Plan"}
-              description={
-                hasPlanApproved
-                  ? "Plan approved and ready for code generation"
-                  : hasPlan
-                    ? "Review the plan, chat with the AI, then approve it"
-                    : "Use AI to create a tailored AWS architecture plan"
-              }
-              status={
-                hasPlanApproved
-                  ? "completed"
-                  : hasPlan
-                    ? "active"
-                    : generatePlan.isPending
-                      ? "active"
-                      : "pending"
-              }
-              disabled={!hasCompletedScan}
-              action={
-                hasPlan && !hasPlanApproved ? (
-                  <Link
-                    to={`/projects/${project.id}/plans/${latestPlan!.id}`}
-                    className="btn-primary text-xs px-3 py-1.5 no-underline"
-                  >
-                    <FileText className="h-3.5 w-3.5" /> Review & Approve
-                  </Link>
-                ) : hasPlanApproved ? (
-                  <Link
-                    to={`/projects/${project.id}/plans/${approvedPlan!.id}`}
-                    className="btn-secondary text-xs px-3 py-1.5 no-underline"
-                  >
-                    <FileText className="h-3.5 w-3.5" /> View Plan
-                  </Link>
-                ) : (
+          {workflowOpen && (
+            <div className="mt-4 space-y-3">
+              {/* Step 1: Scan */}
+              <WorkflowStep
+                step={1}
+                title="Scan Repository"
+                description="Detect technologies, frameworks, and infrastructure patterns"
+                status={hasCompletedScan ? "completed" : scan.isPending ? "active" : "pending"}
+                action={
                   <button
                     className="btn-primary text-xs px-3 py-1.5"
-                    onClick={handleGeneratePlan}
-                    disabled={!hasCompletedScan || generatePlan.isPending}
+                    onClick={() => scan.mutate()}
+                    disabled={scan.isPending}
                   >
-                    {generatePlan.isPending ? (
-                      <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating...</>
+                    {scan.isPending ? (
+                      <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Scanning...</>
+                    ) : hasCompletedScan ? (
+                      <><Scan className="h-3.5 w-3.5" /> Re-scan</>
                     ) : (
-                      <><Cpu className="h-3.5 w-3.5" /> Generate Plan</>
+                      <><Scan className="h-3.5 w-3.5" /> Scan</>
                     )}
                   </button>
-                )
-              }
-            />
+                }
+              />
 
-            {/* Step 4: Generate IaC */}
-            <WorkflowStep
-              step={4}
-              title="Generate Infrastructure Code"
-              description={hasPlanApproved ? "Create OpenTofu files from the approved plan" : "Approve a plan first to unlock this step"}
-              status={hasIac ? "completed" : iacGenerating ? "active" : "pending"}
-              disabled={!hasPlanApproved}
-              action={
-                <button
-                  className="btn-primary text-xs px-3 py-1.5"
-                  onClick={handleGenerateIac}
-                  disabled={!hasPlanApproved || iacGenerating}
-                >
-                  {iacGenerating ? (
-                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating...</>
-                  ) : (
-                    <><Code2 className="h-3.5 w-3.5" /> Generate Code</>
-                  )}
-                </button>
-              }
-            />
+              {/* Scan progress + errors */}
+              {scan.isPending && <ScanProgressIndicator progress={scan.progress} />}
+              {scan.error && (
+                <div className="ml-12 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  Scan failed: {String(scan.error)}
+                </div>
+              )}
 
-            {/* Step 5: Review & Approve */}
-            <WorkflowStep
-              step={5}
-              title="Review Deployment Plan"
-              description="Run tofu plan and review what will be created, updated, or destroyed"
-              status={
-                deployment?.status === "awaiting_approval" || deployment?.status === "approved"
-                  ? "completed"
-                  : tofuPlanning
-                    ? "active"
-                    : "pending"
-              }
-              disabled={!hasIac}
-              action={
-                <button
-                  className="btn-primary text-xs px-3 py-1.5"
-                  onClick={handleTofuPlan}
-                  disabled={!hasIac || tofuPlanning}
-                >
-                  {tofuPlanning ? (
-                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Planning...</>
-                  ) : (
-                    <><Shield className="h-3.5 w-3.5" /> Review Plan</>
-                  )}
-                </button>
-              }
-            />
+              {/* Scan history (nested under step 1) */}
+              {scans && scans.length > 0 && (
+                <div className="ml-12 space-y-1.5">
+                  {scans.map((s) => (
+                    <Link
+                      key={s.id}
+                      to={`/projects/${project.id}/scans/${s.id}`}
+                      className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-xs transition-colors hover:bg-gray-100"
+                    >
+                      <div className="flex items-center gap-2">
+                        <StatusIcon status={s.status} />
+                        <span className="font-medium text-gray-700">
+                          {s.id.slice(0, 8)}
+                        </span>
+                        <span className="text-gray-400">
+                          {s.started_at
+                            ? new Date(s.started_at).toLocaleDateString()
+                            : ""}
+                        </span>
+                      </div>
+                      <span
+                        className={
+                          s.status === "completed"
+                            ? "badge-green"
+                            : s.status === "failed"
+                              ? "badge-red"
+                              : s.status === "running"
+                                ? "badge-blue"
+                                : "badge-gray"
+                        }
+                      >
+                        {s.status}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              )}
 
-            {/* Step 6: Deploy */}
-            <WorkflowStep
-              step={6}
-              title="Deploy to AWS"
-              description="Apply the approved infrastructure changes"
-              status={
-                deployment?.status === "completed"
-                  ? "completed"
-                  : applying
-                    ? "active"
-                    : "pending"
-              }
-              disabled={!deployment?.approved}
-              action={
-                <button
-                  className="btn-primary text-xs px-3 py-1.5"
-                  onClick={handleApply}
-                  disabled={!deployment?.approved || applying}
-                >
-                  {applying ? (
-                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Deploying...</>
-                  ) : (
-                    <><Rocket className="h-3.5 w-3.5" /> Deploy</>
-                  )}
-                </button>
-              }
-            />
-          </div>
-        </div>
-
-        {/* AWS Connection Status (inline in project details) */}
-
-        {/* Scan progress indicator */}
-        {scan.isPending && <ScanProgressIndicator progress={scan.progress} />}
-
-        {scan.error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            Scan failed: {String(scan.error)}
-          </div>
-        )}
-
-        {generatePlan.error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            Plan generation failed: {String(generatePlan.error)}
-          </div>
-        )}
-
-        {iacError && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            IaC generation failed: {iacError}
-          </div>
-        )}
-
-        {deployError && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            Deployment error: {deployError}
-          </div>
-        )}
-
-        {/* IaC Result */}
-        {iacResult && (
-          <div className="card border-green-200 bg-green-50/30">
-            <div className="flex items-center gap-2 mb-2">
-              <Code2 className="h-5 w-5 text-green-600" />
-              <h3 className="text-sm font-semibold text-green-900">
-                Infrastructure Code Generated
-              </h3>
-            </div>
-            <p className="text-xs text-green-700 font-mono mb-2">{iacResult.dir}</p>
-            <div className="flex flex-wrap gap-2">
-              {iacResult.files.map((f) => (
-                <span key={f} className="badge-green font-mono text-[10px]">{f}</span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Deployment Review */}
-        {deployment && deployment.status === "awaiting_approval" && (
-          <div className="card border-yellow-200 bg-yellow-50/30">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Shield className="h-5 w-5 text-yellow-600" />
-                <h3 className="text-sm font-semibold text-yellow-900">
-                  Deployment Review Required
-                </h3>
-                <span className={
-                  deployment.risk_level === "high" ? "badge-red" :
-                  deployment.risk_level === "medium" ? "badge-yellow" : "badge-green"
-                }>
-                  {deployment.risk_level} risk
-                </span>
-              </div>
-              <button className="btn-primary text-xs px-3 py-1.5" onClick={handleApprove}>
-                <CheckCircle2 className="h-3.5 w-3.5" /> Approve & Deploy
-              </button>
-            </div>
-            <p className="text-sm text-yellow-800 mb-2">{deployment.plan_summary}</p>
-            {deployment.plan_output && (
-              <details className="mt-2">
-                <summary className="text-xs text-yellow-700 cursor-pointer hover:text-yellow-900">
-                  Show full plan output
-                </summary>
-                <pre className="mt-2 rounded-lg bg-gray-900 p-3 text-xs text-green-400 overflow-x-auto max-h-[400px] overflow-y-auto">
-                  {deployment.plan_output}
-                </pre>
-              </details>
-            )}
-          </div>
-        )}
-
-        {/* Deployment Complete */}
-        {deployment && deployment.status === "completed" && (
-          <div className="card border-green-200 bg-green-50/30">
-            <div className="flex items-center gap-2 mb-2">
-              <Rocket className="h-5 w-5 text-green-600" />
-              <h3 className="text-sm font-semibold text-green-900">
-                Deployment Successful
-              </h3>
-            </div>
-            <p className="text-xs text-green-700">
-              Completed {deployment.completed_at ? new Date(deployment.completed_at).toLocaleString() : ""}
-            </p>
-            {deployment.apply_output && (
-              <details className="mt-2">
-                <summary className="text-xs text-green-700 cursor-pointer hover:text-green-900">
-                  Show apply output
-                </summary>
-                <pre className="mt-2 rounded-lg bg-gray-900 p-3 text-xs text-green-400 overflow-x-auto max-h-[400px] overflow-y-auto">
-                  {deployment.apply_output}
-                </pre>
-              </details>
-            )}
-          </div>
-        )}
-
-        {/* Deployment Failed */}
-        {deployment && deployment.status === "failed" && (
-          <div className="card border-red-200 bg-red-50/30">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="h-5 w-5 text-red-500" />
-              <h3 className="text-sm font-semibold text-red-900">
-                Deployment Failed
-              </h3>
-            </div>
-            <pre className="mt-2 rounded-lg bg-gray-900 p-3 text-xs text-red-400 overflow-x-auto max-h-[400px] overflow-y-auto">
-              {deployment.error_msg}
-            </pre>
-          </div>
-        )}
-
-        {/* Architecture Planning Session */}
-        {latestPlan && latestPlan.status === "completed" && (
-          <div className={`card ${latestPlan.approved ? "border-green-200 bg-green-50/30" : "border-brand-200 bg-brand-50/30"}`}>
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <FileText className={`h-5 w-5 ${latestPlan.approved ? "text-green-600" : "text-brand-600"}`} />
-                <h3 className={`text-sm font-semibold ${latestPlan.approved ? "text-green-900" : "text-brand-900"}`}>
-                  Architecture Planning
-                </h3>
-                <span className={latestPlan.approved ? "badge-green" : "badge-yellow"}>
-                  {latestPlan.approved ? "Approved" : "Awaiting Review"}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Link
-                  to={`/projects/${project.id}/plans/${latestPlan.id}`}
-                  className="btn-primary text-xs px-3 py-1.5 no-underline"
-                >
-                  {latestPlan.approved ? "View Plans" : "Review & Approve"}
-                </Link>
-                <button
-                  className="btn-secondary text-xs px-3 py-1.5"
-                  onClick={() => {
-                    if (window.confirm("Regenerate the plan? This will start a new planning session.")) {
-                      generatePlan.mutate(undefined, {
-                        onSuccess: (result) => {
-                          navigate(`/projects/${project.id}/plans/${result.plan.id}`);
-                        },
-                      });
-                    }
-                  }}
-                  disabled={generatePlan.isPending}
-                >
-                  {generatePlan.isPending ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    "Regenerate"
-                  )}
-                </button>
-              </div>
-            </div>
-            <p className={`text-xs ${latestPlan.approved ? "text-green-700" : "text-brand-700"}`}>
-              Generated {new Date(latestPlan.created_at).toLocaleString()}
-            </p>
-          </div>
-        )}
-
-        {/* Scan History */}
-        {scans && scans.length > 0 && (
-          <div className="card">
-            <h2 className="mb-4 text-sm font-semibold text-gray-900">
-              Scan History
-            </h2>
-            <div className="space-y-2">
-              {scans.map((s) => (
-                <Link
-                  key={s.id}
-                  to={`/projects/${project.id}/scans/${s.id}`}
-                  className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 transition-colors hover:bg-gray-100"
-                >
-                  <div className="flex items-center gap-3">
-                    <StatusIcon status={s.status} />
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        Scan {s.id.slice(0, 8)}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {s.started_at
-                          ? new Date(s.started_at).toLocaleString()
-                          : s.created_at}
-                      </p>
-                    </div>
-                  </div>
-                  <span
-                    className={
-                      s.status === "completed"
-                        ? "badge-green"
-                        : s.status === "failed"
-                          ? "badge-red"
-                          : s.status === "running"
-                            ? "badge-blue"
-                            : "badge-gray"
-                    }
+              {/* Step 2: Questionnaire */}
+              <WorkflowStep
+                step={2}
+                title="Architecture Questionnaire"
+                description="Answer questions about your infrastructure requirements"
+                status={hasCompletedQuestionnaire ? "completed" : "pending"}
+                disabled={!hasCompletedScan}
+                action={
+                  <button
+                    className="btn-primary text-xs px-3 py-1.5"
+                    onClick={() => navigate(`/projects/${project.id}/questionnaire`)}
+                    disabled={!hasCompletedScan}
                   >
-                    {s.status}
-                  </span>
-                </Link>
-              ))}
+                    <ClipboardList className="h-3.5 w-3.5" />
+                    {hasCompletedQuestionnaire ? "Edit Answers" : "Start"}
+                  </button>
+                }
+              />
+
+              {/* Step 3: Generate & Approve Plan */}
+              <WorkflowStep
+                step={3}
+                title={hasPlanApproved ? "Plan Approved" : hasPlan ? "Review & Approve Plan" : "Generate Infrastructure Plan"}
+                description={
+                  hasPlanApproved
+                    ? "Plan approved and ready for code generation"
+                    : hasPlan
+                      ? "Review the plan, chat with the AI, then approve it"
+                      : "Use AI to create a tailored AWS architecture plan"
+                }
+                status={
+                  hasPlanApproved
+                    ? "completed"
+                    : hasPlan
+                      ? "active"
+                      : generatePlan.isPending
+                        ? "active"
+                        : "pending"
+                }
+                disabled={!hasCompletedScan}
+                action={
+                  <div className="flex items-center gap-2">
+                    {hasPlan ? (
+                      <Link
+                        to={`/projects/${project.id}/plans/${(hasPlanApproved ? approvedPlan! : latestPlan!).id}`}
+                        className="btn-primary text-xs px-3 py-1.5 no-underline"
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        {hasPlanApproved ? "View Plan" : "Review & Approve"}
+                      </Link>
+                    ) : (
+                      <button
+                        className="btn-primary text-xs px-3 py-1.5"
+                        onClick={handleGeneratePlan}
+                        disabled={!hasCompletedScan || generatePlan.isPending}
+                      >
+                        {generatePlan.isPending ? (
+                          <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating...</>
+                        ) : (
+                          <><Cpu className="h-3.5 w-3.5" /> Generate Plan</>
+                        )}
+                      </button>
+                    )}
+                    {hasPlan && (
+                      <button
+                        className="btn-secondary text-xs px-3 py-1.5"
+                        onClick={() => {
+                          if (window.confirm("Regenerate the plan? This will start a new planning session.")) {
+                            generatePlan.mutate(undefined, {
+                              onSuccess: (result) => navigate(`/projects/${project.id}/plans/${result.plan.id}`),
+                            });
+                          }
+                        }}
+                        disabled={generatePlan.isPending}
+                      >
+                        {generatePlan.isPending ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <><RotateCcw className="h-3.5 w-3.5" /> Regenerate</>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                }
+              />
+
+              {generatePlan.error && (
+                <div className="ml-12 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  Plan generation failed: {String(generatePlan.error)}
+                </div>
+              )}
+
+              {/* Step 4: Generate IaC */}
+              <WorkflowStep
+                step={4}
+                title="Generate Infrastructure Code"
+                description={hasPlanApproved ? "Create OpenTofu files from the approved plan" : "Approve a plan first to unlock this step"}
+                status={hasIac ? "completed" : iacGenerating ? "active" : "pending"}
+                disabled={!hasPlanApproved}
+                action={
+                  <button
+                    className="btn-primary text-xs px-3 py-1.5"
+                    onClick={handleGenerateIac}
+                    disabled={!hasPlanApproved || iacGenerating}
+                  >
+                    {iacGenerating ? (
+                      <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating...</>
+                    ) : (
+                      <><Code2 className="h-3.5 w-3.5" /> Generate Code</>
+                    )}
+                  </button>
+                }
+              />
+
+              {iacError && (
+                <div className="ml-12 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  IaC generation failed: {iacError}
+                </div>
+              )}
+
+              {/* IaC Result inline */}
+              {iacResult && (
+                <div className="ml-12 rounded-lg border border-green-200 bg-green-50 p-3">
+                  <p className="text-xs text-green-700 font-mono mb-1.5">{iacResult.dir}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {iacResult.files.map((f) => (
+                      <span key={f} className="badge-green font-mono text-[10px]">{f}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Step 5: Review & Approve Deployment */}
+              <WorkflowStep
+                step={5}
+                title="Review Deployment Plan"
+                description="Run tofu plan and review what will be created, updated, or destroyed"
+                status={
+                  deployment?.status === "awaiting_approval" || deployment?.status === "approved"
+                    ? "completed"
+                    : tofuPlanning
+                      ? "active"
+                      : "pending"
+                }
+                disabled={!hasIac}
+                action={
+                  <button
+                    className="btn-primary text-xs px-3 py-1.5"
+                    onClick={handleTofuPlan}
+                    disabled={!hasIac || tofuPlanning}
+                  >
+                    {tofuPlanning ? (
+                      <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Planning...</>
+                    ) : (
+                      <><Shield className="h-3.5 w-3.5" /> Review Plan</>
+                    )}
+                  </button>
+                }
+              />
+
+              {/* Deployment review inline */}
+              {deployment && deployment.status === "awaiting_approval" && (
+                <div className="ml-12 rounded-lg border border-yellow-200 bg-yellow-50 p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-yellow-800">{deployment.plan_summary}</span>
+                      <span className={
+                        deployment.risk_level === "high" ? "badge-red" :
+                        deployment.risk_level === "medium" ? "badge-yellow" : "badge-green"
+                      }>
+                        {deployment.risk_level} risk
+                      </span>
+                    </div>
+                    <button className="btn-primary text-xs px-3 py-1.5" onClick={handleApprove}>
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+                    </button>
+                  </div>
+                  {deployment.plan_output && (
+                    <details>
+                      <summary className="text-[10px] text-yellow-700 cursor-pointer hover:text-yellow-900">
+                        Full plan output
+                      </summary>
+                      <pre className="mt-2 rounded bg-gray-900 p-2 text-[10px] text-green-400 overflow-x-auto max-h-[300px] overflow-y-auto">
+                        {deployment.plan_output}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              )}
+
+              {/* Step 6: Deploy */}
+              <WorkflowStep
+                step={6}
+                title="Deploy to AWS"
+                description="Apply the approved infrastructure changes"
+                status={
+                  deployment?.status === "completed"
+                    ? "completed"
+                    : applying
+                      ? "active"
+                      : "pending"
+                }
+                disabled={!deployment?.approved}
+                action={
+                  <button
+                    className="btn-primary text-xs px-3 py-1.5"
+                    onClick={handleApply}
+                    disabled={!deployment?.approved || applying}
+                  >
+                    {applying ? (
+                      <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Deploying...</>
+                    ) : (
+                      <><Rocket className="h-3.5 w-3.5" /> Deploy</>
+                    )}
+                  </button>
+                }
+              />
+
+              {deployError && (
+                <div className="ml-12 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  Deployment error: {deployError}
+                </div>
+              )}
+
+              {/* Deploy result inline */}
+              {deployment && deployment.status === "completed" && (
+                <div className="ml-12 rounded-lg border border-green-200 bg-green-50 p-3">
+                  <p className="text-xs font-medium text-green-800">Deployment successful</p>
+                  <p className="text-[10px] text-green-700">
+                    {deployment.completed_at ? new Date(deployment.completed_at).toLocaleString() : ""}
+                  </p>
+                  {deployment.apply_output && (
+                    <details className="mt-1.5">
+                      <summary className="text-[10px] text-green-700 cursor-pointer">Apply output</summary>
+                      <pre className="mt-1.5 rounded bg-gray-900 p-2 text-[10px] text-green-400 overflow-x-auto max-h-[300px] overflow-y-auto">
+                        {deployment.apply_output}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              )}
+
+              {deployment && deployment.status === "failed" && (
+                <div className="ml-12 rounded-lg border border-red-200 bg-red-50 p-3">
+                  <p className="text-xs font-medium text-red-800">Deployment failed</p>
+                  <pre className="mt-1.5 rounded bg-gray-900 p-2 text-[10px] text-red-400 overflow-x-auto max-h-[300px] overflow-y-auto">
+                    {deployment.error_msg}
+                  </pre>
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </>
   );
