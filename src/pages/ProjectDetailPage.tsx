@@ -38,7 +38,14 @@ export function ProjectDetailPage() {
   const { data: scans } = useScansForProject(id!);
   const { data: questionnaire } = useQuestionnaire(id!);
   const { data: latestPlan } = useLatestPlan(id!);
-  const planIsGenerating = latestPlan?.status === "generating";
+
+  // Consider a plan "generating" only if it started less than 5 minutes ago
+  const planIsGenerating = latestPlan?.status === "generating" && (() => {
+    const created = new Date(latestPlan.created_at).getTime();
+    const fiveMinutes = 5 * 60 * 1000;
+    return Date.now() - created < fiveMinutes;
+  })();
+  const planIsStuck = latestPlan?.status === "generating" && !planIsGenerating;
   const { data: approvedPlan } = useApprovedPlan(id!);
   const generatePlan = useGeneratePlan(id!);
 
@@ -57,6 +64,7 @@ export function ProjectDetailPage() {
   const hasCompletedScan = scans?.some((s) => s.status === "completed");
   const hasCompletedQuestionnaire = questionnaire?.completed;
   const hasPlan = latestPlan?.status === "completed";
+  const hasPlanFailed = latestPlan?.status === "failed" || planIsStuck;
   const hasPlanApproved = !!approvedPlan;
   const hasIac = !!iacResult;
 
@@ -336,16 +344,22 @@ export function ProjectDetailPage() {
                       ? "Review & Approve Plan"
                       : planIsGenerating
                         ? "Generating Plan..."
-                        : "Generate Infrastructure Plan"
+                        : hasPlanFailed
+                          ? "Plan Generation Failed"
+                          : "Generate Infrastructure Plan"
                 }
                 description={
                   hasPlanApproved
                     ? "Plan approved and ready for code generation"
                     : planIsGenerating
                       ? "The AI is working on your plan. You can navigate away safely."
-                      : hasPlan
-                        ? "Review the plan, chat with the AI, then approve it"
-                        : "Use AI to create a tailored AWS architecture plan"
+                      : hasPlanFailed
+                        ? planIsStuck
+                          ? "The previous generation appears to have stalled. Try regenerating."
+                          : latestPlan?.error_msg || "Something went wrong. Try regenerating."
+                        : hasPlan
+                          ? "Review the plan, chat with the AI, then approve it"
+                          : "Use AI to create a tailored AWS architecture plan"
                 }
                 status={
                   hasPlanApproved
@@ -354,7 +368,9 @@ export function ProjectDetailPage() {
                       ? "active"
                       : generatePlan.isPending
                         ? "active"
-                        : "pending"
+                        : hasPlanFailed
+                          ? "pending"
+                          : "pending"
                 }
                 disabled={!hasCompletedScan}
                 action={
@@ -363,6 +379,18 @@ export function ProjectDetailPage() {
                       <span className="flex items-center gap-2 text-xs text-brand-700 px-3 py-1.5">
                         <Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating...
                       </span>
+                    ) : hasPlanFailed ? (
+                      <button
+                        className="btn-primary text-xs px-3 py-1.5"
+                        onClick={handleGeneratePlan}
+                        disabled={generatePlan.isPending}
+                      >
+                        {generatePlan.isPending ? (
+                          <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating...</>
+                        ) : (
+                          <><RotateCcw className="h-3.5 w-3.5" /> Retry</>
+                        )}
+                      </button>
                     ) : hasPlan ? (
                       <Link
                         to={`/projects/${project.id}/plans/${(hasPlanApproved ? approvedPlan! : latestPlan!).id}`}
