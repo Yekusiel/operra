@@ -1,4 +1,5 @@
 import { useParams, useNavigate, Link } from "react-router-dom";
+import { useState } from "react";
 import {
   ArrowLeft,
   Scan,
@@ -12,6 +13,10 @@ import {
   ClipboardList,
   Cpu,
   FileText,
+  Code2,
+  Rocket,
+  Shield,
+  AlertTriangle,
 } from "lucide-react";
 import { TopBar } from "../components/layout/TopBar";
 import { ScanProgressIndicator } from "../components/scanner/ScanProgress";
@@ -19,6 +24,8 @@ import { useProject, useDeleteProject } from "../hooks/useProjects";
 import { useScan, useScansForProject } from "../hooks/useScan";
 import { useQuestionnaire } from "../hooks/useQuestionnaire";
 import { useLatestPlan, useGeneratePlan } from "../hooks/usePlan";
+import * as api from "../lib/tauri";
+import type { AwsConnection } from "../lib/types";
 
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -31,8 +38,66 @@ export function ProjectDetailPage() {
   const { data: latestPlan } = useLatestPlan(id!);
   const generatePlan = useGeneratePlan(id!);
 
+  const [awsConn, setAwsConn] = useState<AwsConnection | null>(null);
+  const [awsChecking, setAwsChecking] = useState(false);
+  const [iacGenerating, setIacGenerating] = useState(false);
+  const [iacResult, setIacResult] = useState<{ files: string[]; dir: string } | null>(null);
+  const [iacError, setIacError] = useState<string | null>(null);
+  const [tofuPlanning, setTofuPlanning] = useState(false);
+  const [deployment, setDeployment] = useState<import("../lib/types").Deployment | null>(null);
+  const [deployError, setDeployError] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
+
   const hasCompletedScan = scans?.some((s) => s.status === "completed");
   const hasCompletedQuestionnaire = questionnaire?.completed;
+  const hasPlan = latestPlan?.status === "completed";
+  const hasIac = !!iacResult;
+
+  // Load AWS connection on mount
+  useState(() => {
+    api.getAwsConnection(id!).then(setAwsConn);
+  });
+
+  const handleTestAws = () => {
+    setAwsChecking(true);
+    api.testAwsConnection(id!)
+      .then(setAwsConn)
+      .finally(() => setAwsChecking(false));
+  };
+
+  const handleGenerateIac = () => {
+    if (!latestPlan) return;
+    setIacGenerating(true);
+    setIacError(null);
+    api.generateIac(id!, latestPlan.id)
+      .then((r) => setIacResult({ files: r.files, dir: r.output_dir }))
+      .catch((e) => setIacError(String(e)))
+      .finally(() => setIacGenerating(false));
+  };
+
+  const handleTofuPlan = () => {
+    setTofuPlanning(true);
+    setDeployError(null);
+    api.runTofuPlan(id!)
+      .then(setDeployment)
+      .catch((e) => setDeployError(String(e)))
+      .finally(() => setTofuPlanning(false));
+  };
+
+  const handleApprove = () => {
+    if (!deployment) return;
+    api.approveDeployment(deployment.id).then(setDeployment);
+  };
+
+  const handleApply = () => {
+    if (!deployment) return;
+    setApplying(true);
+    setDeployError(null);
+    api.runTofuApply(deployment.id)
+      .then(setDeployment)
+      .catch((e) => setDeployError(String(e)))
+      .finally(() => setApplying(false));
+  };
 
   if (isLoading) {
     return (
@@ -211,7 +276,123 @@ export function ProjectDetailPage() {
                 </button>
               }
             />
+
+            {/* Step 4: Generate IaC */}
+            <WorkflowStep
+              step={4}
+              title="Generate Infrastructure Code"
+              description="Create OpenTofu files from the approved plan"
+              status={hasIac ? "completed" : iacGenerating ? "active" : "pending"}
+              disabled={!hasPlan}
+              action={
+                <button
+                  className="btn-primary text-xs px-3 py-1.5"
+                  onClick={handleGenerateIac}
+                  disabled={!hasPlan || iacGenerating}
+                >
+                  {iacGenerating ? (
+                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating...</>
+                  ) : (
+                    <><Code2 className="h-3.5 w-3.5" /> Generate Code</>
+                  )}
+                </button>
+              }
+            />
+
+            {/* Step 5: Review & Approve */}
+            <WorkflowStep
+              step={5}
+              title="Review Deployment Plan"
+              description="Run tofu plan and review what will be created, updated, or destroyed"
+              status={
+                deployment?.status === "awaiting_approval" || deployment?.status === "approved"
+                  ? "completed"
+                  : tofuPlanning
+                    ? "active"
+                    : "pending"
+              }
+              disabled={!hasIac}
+              action={
+                <button
+                  className="btn-primary text-xs px-3 py-1.5"
+                  onClick={handleTofuPlan}
+                  disabled={!hasIac || tofuPlanning}
+                >
+                  {tofuPlanning ? (
+                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Planning...</>
+                  ) : (
+                    <><Shield className="h-3.5 w-3.5" /> Review Plan</>
+                  )}
+                </button>
+              }
+            />
+
+            {/* Step 6: Deploy */}
+            <WorkflowStep
+              step={6}
+              title="Deploy to AWS"
+              description="Apply the approved infrastructure changes"
+              status={
+                deployment?.status === "completed"
+                  ? "completed"
+                  : applying
+                    ? "active"
+                    : "pending"
+              }
+              disabled={!deployment?.approved}
+              action={
+                <button
+                  className="btn-primary text-xs px-3 py-1.5"
+                  onClick={handleApply}
+                  disabled={!deployment?.approved || applying}
+                >
+                  {applying ? (
+                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Deploying...</>
+                  ) : (
+                    <><Rocket className="h-3.5 w-3.5" /> Deploy</>
+                  )}
+                </button>
+              }
+            />
           </div>
+        </div>
+
+        {/* AWS Connection */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Cloud className="h-4.5 w-4.5 text-gray-600" />
+              <h2 className="text-sm font-semibold text-gray-900">AWS Connection</h2>
+            </div>
+            <button
+              className="btn-secondary text-xs px-3 py-1.5"
+              onClick={handleTestAws}
+              disabled={awsChecking}
+            >
+              {awsChecking ? (
+                <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking...</>
+              ) : (
+                "Test Connection"
+              )}
+            </button>
+          </div>
+          {awsConn?.status === "connected" ? (
+            <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+              <p className="text-sm font-medium text-green-800">Connected</p>
+              <p className="text-xs text-green-700 mt-0.5 font-mono">
+                Account: {awsConn.account_id} &middot; {awsConn.arn}
+              </p>
+            </div>
+          ) : awsConn?.status === "failed" ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+              <p className="text-sm font-medium text-red-800">Not Connected</p>
+              <p className="text-xs text-red-700 mt-0.5">{awsConn.error_msg}</p>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500">
+              Click "Test Connection" to verify your AWS credentials for profile "{project.aws_profile || "default"}" in {project.aws_region}.
+            </p>
+          )}
         </div>
 
         {/* Scan progress indicator */}
@@ -226,6 +407,110 @@ export function ProjectDetailPage() {
         {generatePlan.error && (
           <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             Plan generation failed: {String(generatePlan.error)}
+          </div>
+        )}
+
+        {iacError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            IaC generation failed: {iacError}
+          </div>
+        )}
+
+        {deployError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            Deployment error: {deployError}
+          </div>
+        )}
+
+        {/* IaC Result */}
+        {iacResult && (
+          <div className="card border-green-200 bg-green-50/30">
+            <div className="flex items-center gap-2 mb-2">
+              <Code2 className="h-5 w-5 text-green-600" />
+              <h3 className="text-sm font-semibold text-green-900">
+                Infrastructure Code Generated
+              </h3>
+            </div>
+            <p className="text-xs text-green-700 font-mono mb-2">{iacResult.dir}</p>
+            <div className="flex flex-wrap gap-2">
+              {iacResult.files.map((f) => (
+                <span key={f} className="badge-green font-mono text-[10px]">{f}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Deployment Review */}
+        {deployment && deployment.status === "awaiting_approval" && (
+          <div className="card border-yellow-200 bg-yellow-50/30">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-yellow-600" />
+                <h3 className="text-sm font-semibold text-yellow-900">
+                  Deployment Review Required
+                </h3>
+                <span className={
+                  deployment.risk_level === "high" ? "badge-red" :
+                  deployment.risk_level === "medium" ? "badge-yellow" : "badge-green"
+                }>
+                  {deployment.risk_level} risk
+                </span>
+              </div>
+              <button className="btn-primary text-xs px-3 py-1.5" onClick={handleApprove}>
+                <CheckCircle2 className="h-3.5 w-3.5" /> Approve & Deploy
+              </button>
+            </div>
+            <p className="text-sm text-yellow-800 mb-2">{deployment.plan_summary}</p>
+            {deployment.plan_output && (
+              <details className="mt-2">
+                <summary className="text-xs text-yellow-700 cursor-pointer hover:text-yellow-900">
+                  Show full plan output
+                </summary>
+                <pre className="mt-2 rounded-lg bg-gray-900 p-3 text-xs text-green-400 overflow-x-auto max-h-[400px] overflow-y-auto">
+                  {deployment.plan_output}
+                </pre>
+              </details>
+            )}
+          </div>
+        )}
+
+        {/* Deployment Complete */}
+        {deployment && deployment.status === "completed" && (
+          <div className="card border-green-200 bg-green-50/30">
+            <div className="flex items-center gap-2 mb-2">
+              <Rocket className="h-5 w-5 text-green-600" />
+              <h3 className="text-sm font-semibold text-green-900">
+                Deployment Successful
+              </h3>
+            </div>
+            <p className="text-xs text-green-700">
+              Completed {deployment.completed_at ? new Date(deployment.completed_at).toLocaleString() : ""}
+            </p>
+            {deployment.apply_output && (
+              <details className="mt-2">
+                <summary className="text-xs text-green-700 cursor-pointer hover:text-green-900">
+                  Show apply output
+                </summary>
+                <pre className="mt-2 rounded-lg bg-gray-900 p-3 text-xs text-green-400 overflow-x-auto max-h-[400px] overflow-y-auto">
+                  {deployment.apply_output}
+                </pre>
+              </details>
+            )}
+          </div>
+        )}
+
+        {/* Deployment Failed */}
+        {deployment && deployment.status === "failed" && (
+          <div className="card border-red-200 bg-red-50/30">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle className="h-5 w-5 text-red-500" />
+              <h3 className="text-sm font-semibold text-red-900">
+                Deployment Failed
+              </h3>
+            </div>
+            <pre className="mt-2 rounded-lg bg-gray-900 p-3 text-xs text-red-400 overflow-x-auto max-h-[400px] overflow-y-auto">
+              {deployment.error_msg}
+            </pre>
           </div>
         )}
 

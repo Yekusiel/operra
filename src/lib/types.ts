@@ -275,6 +275,63 @@ export interface PlanMessage {
   created_at: string;
 }
 
+// ── Tools & Dependencies ──
+
+export interface ToolStatus {
+  name: string;
+  installed: boolean;
+  version: string | null;
+  path: string | null;
+  install_instructions: string;
+  required_for: string;
+}
+
+export interface DependencyReport {
+  tools: ToolStatus[];
+  all_installed: boolean;
+  missing_count: number;
+}
+
+// ── AWS Connection ──
+
+export interface AwsConnection {
+  id: string;
+  project_id: string;
+  account_id: string | null;
+  arn: string | null;
+  user_id: string | null;
+  status: "unchecked" | "connected" | "failed";
+  error_msg: string | null;
+  checked_at: string | null;
+  created_at: string;
+}
+
+// ── Deployments ──
+
+export interface IacGenerationResult {
+  output_dir: string;
+  files: string[];
+}
+
+export interface Deployment {
+  id: string;
+  project_id: string;
+  iac_id: string | null;
+  action: string;
+  status: string;
+  plan_output: string | null;
+  plan_summary: string | null;
+  apply_output: string | null;
+  resources_json: string | null;
+  risk_level: string | null;
+  approved: boolean;
+  approved_at: string | null;
+  error_msg: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
 // ── Constants ──
 
 export const AWS_REGIONS = [

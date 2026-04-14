@@ -1,8 +1,9 @@
 import { NavLink } from "react-router-dom";
-import { FolderKanban, LayoutDashboard, DollarSign, Activity } from "lucide-react";
+import { FolderKanban, LayoutDashboard, DollarSign, Activity, Settings } from "lucide-react";
 
 const navItems = [
   { to: "/", icon: FolderKanban, label: "Projects" },
+  { to: "/setup", icon: Settings, label: "Setup" },
   { to: "/monitoring", icon: Activity, label: "Monitoring", disabled: true },
   { to: "/costs", icon: DollarSign, label: "Cost Explorer", disabled: true },
 ];

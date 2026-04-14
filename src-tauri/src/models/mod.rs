@@ -1,4 +1,6 @@
 pub mod adapter_log;
+pub mod aws_connection;
+pub mod deployment;
 pub mod plan;
 pub mod plan_message;
 pub mod project;

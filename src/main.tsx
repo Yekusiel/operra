@@ -9,6 +9,7 @@ import { ProjectDetailPage } from "./pages/ProjectDetailPage";
 import { ScanResultsPage } from "./pages/ScanResultsPage";
 import { QuestionnairePage } from "./pages/QuestionnairePage";
 import { PlanViewPage } from "./pages/PlanViewPage";
+import { SetupPage } from "./pages/SetupPage";
 import "./styles/globals.css";
 
 const queryClient = new QueryClient({
@@ -27,6 +28,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
         <Routes>
           <Route element={<App />}>
             <Route index element={<ProjectListPage />} />
+            <Route path="setup" element={<SetupPage />} />
             <Route path="projects/new" element={<NewProjectPage />} />
             <Route path="projects/:id" element={<ProjectDetailPage />} />
             <Route

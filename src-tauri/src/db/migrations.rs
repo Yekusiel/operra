@@ -116,6 +116,59 @@ const MIGRATIONS: &[Migration] = &[
             CREATE INDEX idx_plan_messages_plan_id ON plan_messages(plan_id);
         ",
     },
+    Migration {
+        version: 4,
+        name: "deployments_and_iac",
+        sql: "
+            CREATE TABLE iac_generations (
+                id              TEXT PRIMARY KEY,
+                project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                plan_id         TEXT REFERENCES plans(id),
+                output_dir      TEXT NOT NULL,
+                files_json      TEXT,
+                status          TEXT NOT NULL DEFAULT 'pending',
+                error_msg       TEXT,
+                created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+            );
+
+            CREATE INDEX idx_iac_project_id ON iac_generations(project_id);
+
+            CREATE TABLE deployments (
+                id              TEXT PRIMARY KEY,
+                project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                iac_id          TEXT REFERENCES iac_generations(id),
+                action          TEXT NOT NULL DEFAULT 'apply',
+                status          TEXT NOT NULL DEFAULT 'pending',
+                plan_output     TEXT,
+                plan_summary    TEXT,
+                apply_output    TEXT,
+                resources_json  TEXT,
+                risk_level      TEXT,
+                approved        INTEGER NOT NULL DEFAULT 0,
+                approved_at     TEXT,
+                error_msg       TEXT,
+                started_at      TEXT,
+                completed_at    TEXT,
+                created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+            );
+
+            CREATE INDEX idx_deployments_project_id ON deployments(project_id);
+
+            CREATE TABLE aws_connections (
+                id              TEXT PRIMARY KEY,
+                project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                account_id      TEXT,
+                arn             TEXT,
+                user_id         TEXT,
+                status          TEXT NOT NULL DEFAULT 'unchecked',
+                error_msg       TEXT,
+                checked_at      TEXT,
+                created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+            );
+
+            CREATE UNIQUE INDEX idx_aws_conn_project_id ON aws_connections(project_id);
+        ",
+    },
 ];
 
 pub fn run_all(conn: &Connection) -> Result<(), rusqlite::Error> {

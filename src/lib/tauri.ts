@@ -11,6 +11,10 @@ import type {
   Plan,
   PlanGenerationResult,
   PlanMessage,
+  DependencyReport,
+  AwsConnection,
+  IacGenerationResult,
+  Deployment,
 } from "./types";
 
 // ── Projects ──
@@ -87,3 +91,39 @@ export const sendPlanMessage = (planId: string, message: string) =>
 
 export const getPlanMessages = (planId: string) =>
   invoke<PlanMessage[]>("get_plan_messages", { planId });
+
+// ── Tools & Dependencies ──
+
+export const checkDependencies = () =>
+  invoke<DependencyReport>("check_dependencies");
+
+// ── AWS Connection ──
+
+export const testAwsConnection = (projectId: string) =>
+  invoke<AwsConnection>("test_aws_connection", { projectId });
+
+export const getAwsConnection = (projectId: string) =>
+  invoke<AwsConnection | null>("get_aws_connection", { projectId });
+
+export const listAwsProfiles = () =>
+  invoke<string[]>("list_aws_profiles");
+
+// ── Deployment ──
+
+export const generateIac = (projectId: string, planId: string) =>
+  invoke<IacGenerationResult>("generate_iac", { projectId, planId });
+
+export const runTofuPlan = (projectId: string) =>
+  invoke<Deployment>("run_tofu_plan", { projectId });
+
+export const approveDeployment = (deploymentId: string) =>
+  invoke<Deployment>("approve_deployment", { deploymentId });
+
+export const runTofuApply = (deploymentId: string) =>
+  invoke<Deployment>("run_tofu_apply", { deploymentId });
+
+export const getDeployment = (deploymentId: string) =>
+  invoke<Deployment | null>("get_deployment", { deploymentId });
+
+export const listDeployments = (projectId: string) =>
+  invoke<Deployment[]>("list_deployments", { projectId });
