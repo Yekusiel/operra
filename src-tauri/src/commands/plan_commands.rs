@@ -163,11 +163,10 @@ pub async fn generate_additional_option(
     };
 
     let base_context = build_project_context(&project, &scan_findings, &questionnaire);
-    let next_label = PlanOption::next_label(
-        &state.conn.lock().map_err(|e| e.to_string())?,
-        &plan_id,
-    )
-    .map_err(|e| e.to_string())?;
+    let next_label = {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        PlanOption::next_label(&conn, &plan_id).map_err(|e| e.to_string())?
+    };
 
     let mut prompt = build_single_plan_prompt(&base_context, &existing_options, &next_label);
     if let Some(ref req) = user_request {
