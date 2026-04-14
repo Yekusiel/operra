@@ -122,8 +122,21 @@ impl PlanOption {
     }
 }
 
+/// Headings that signal the end of plan options (non-plan sections).
+const STOP_HEADINGS: &[&str] = &[
+    "recommendation",
+    "summary",
+    "conclusion",
+    "comparison",
+    "next steps",
+    "which plan",
+    "cost comparison",
+    "final thoughts",
+];
+
 /// Parse plan options from AI response text.
-/// Looks for "## Plan A:", "## Plan B:", etc. patterns.
+/// Only matches lines that are markdown headings starting with "Plan [A-Z]:".
+/// Stops collecting when it hits a non-plan heading section.
 pub fn parse_plan_options(text: &str) -> Vec<(String, String, String)> {
     let mut options = Vec::new();
     let mut current_label: Option<String> = None;
@@ -131,7 +144,7 @@ pub fn parse_plan_options(text: &str) -> Vec<(String, String, String)> {
     let mut current_content = String::new();
 
     for line in text.lines() {
-        // Match patterns like "## Plan A: Title" or "### Plan A: Title" or "## Plan A - Title"
+        // Check if this is a plan header
         if let Some(plan_info) = extract_plan_header(line) {
             // Save previous option
             if let (Some(label), Some(title)) = (current_label.take(), current_title.take()) {
@@ -143,6 +156,16 @@ pub fn parse_plan_options(text: &str) -> Vec<(String, String, String)> {
             current_label = Some(plan_info.0);
             current_title = Some(plan_info.1);
             current_content = String::new();
+        } else if is_non_plan_heading(line) {
+            // Hit a section like "Recommendation" -- stop collecting for current plan
+            if let (Some(label), Some(title)) = (current_label.take(), current_title.take()) {
+                let content = current_content.trim().to_string();
+                if !content.is_empty() {
+                    options.push((label, title, content));
+                }
+            }
+            current_content = String::new();
+            // Don't collect any more content
         } else if current_label.is_some() {
             current_content.push_str(line);
             current_content.push('\n');
@@ -160,19 +183,38 @@ pub fn parse_plan_options(text: &str) -> Vec<(String, String, String)> {
     options
 }
 
+/// Check if a line is a markdown heading that's NOT a plan header.
+/// This detects sections like "## Recommendation", "## Summary", etc.
+fn is_non_plan_heading(line: &str) -> bool {
+    let trimmed = line.trim();
+    if !trimmed.starts_with('#') {
+        return false;
+    }
+    let heading_text = trimmed.trim_start_matches('#').trim().to_lowercase();
+    // If it's a "Plan X" heading, it's not a stop heading
+    if heading_text.starts_with("plan ") {
+        if let Some(c) = heading_text.chars().nth(5) {
+            if c.is_ascii_uppercase() || c.is_ascii_lowercase() {
+                return false;
+            }
+        }
+    }
+    STOP_HEADINGS.iter().any(|s| heading_text.starts_with(s))
+}
+
 fn extract_plan_header(line: &str) -> Option<(String, String)> {
     let trimmed = line.trim();
 
-    // Strip markdown heading markers and bold markers
-    let stripped = trimmed
-        .trim_start_matches('#')
-        .trim()
-        .trim_start_matches("**")
-        .trim_end_matches("**")
-        .trim();
+    // Must be a heading line (starts with #) -- this prevents matching
+    // "Plan A" references inside paragraph text
+    if !trimmed.starts_with('#') {
+        return None;
+    }
+
+    let stripped = trimmed.trim_start_matches('#').trim();
 
     // Match "Plan X: Title" or "Plan X - Title" where X is A-Z
-    if !stripped.to_lowercase().starts_with("plan ") {
+    if !stripped.starts_with("Plan ") {
         return None;
     }
 
@@ -182,13 +224,19 @@ fn extract_plan_header(line: &str) -> Option<(String, String)> {
         return None;
     }
 
-    let rest = after_plan[1..].trim();
-    let title = rest
+    // The character after the letter must be : or - or whitespace (not more word chars)
+    // This prevents matching "Plan Details" or "Plan Overview"
+    let after_letter = &after_plan[1..];
+    let next_char = after_letter.trim_start().chars().next().unwrap_or(':');
+    if next_char != ':' && next_char != '-' && next_char != '\u{2013}' {
+        return None;
+    }
+
+    let title = after_letter
+        .trim()
         .trim_start_matches(':')
         .trim_start_matches('-')
-        .trim_start_matches('\u{2013}') // en-dash
-        .trim()
-        .trim_end_matches("**")
+        .trim_start_matches('\u{2013}')
         .trim()
         .to_string();
 
