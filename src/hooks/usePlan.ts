@@ -3,11 +3,17 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as api from "../lib/tauri";
 
 export function useLatestPlan(projectId: string) {
-  return useQuery({
+  const query = useQuery({
     queryKey: ["latestPlan", projectId],
     queryFn: () => api.getLatestPlan(projectId),
     enabled: !!projectId,
+    // Poll every 3s while a plan is generating so we pick up completion
+    refetchInterval: (query) => {
+      const plan = query.state.data;
+      return plan?.status === "generating" ? 3000 : false;
+    },
   });
+  return query;
 }
 
 export function usePlan(planId: string) {

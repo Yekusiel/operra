@@ -38,6 +38,7 @@ export function ProjectDetailPage() {
   const { data: scans } = useScansForProject(id!);
   const { data: questionnaire } = useQuestionnaire(id!);
   const { data: latestPlan } = useLatestPlan(id!);
+  const planIsGenerating = latestPlan?.status === "generating";
   const { data: approvedPlan } = useApprovedPlan(id!);
   const generatePlan = useGeneratePlan(id!);
 
@@ -328,18 +329,28 @@ export function ProjectDetailPage() {
               {/* Step 3: Generate & Approve Plan */}
               <WorkflowStep
                 step={3}
-                title={hasPlanApproved ? "Plan Approved" : hasPlan ? "Review & Approve Plan" : "Generate Infrastructure Plan"}
+                title={
+                  hasPlanApproved
+                    ? "Plan Approved"
+                    : hasPlan
+                      ? "Review & Approve Plan"
+                      : planIsGenerating
+                        ? "Generating Plan..."
+                        : "Generate Infrastructure Plan"
+                }
                 description={
                   hasPlanApproved
                     ? "Plan approved and ready for code generation"
-                    : hasPlan
-                      ? "Review the plan, chat with the AI, then approve it"
-                      : "Use AI to create a tailored AWS architecture plan"
+                    : planIsGenerating
+                      ? "The AI is working on your plan. You can navigate away safely."
+                      : hasPlan
+                        ? "Review the plan, chat with the AI, then approve it"
+                        : "Use AI to create a tailored AWS architecture plan"
                 }
                 status={
                   hasPlanApproved
                     ? "completed"
-                    : hasPlan
+                    : hasPlan || planIsGenerating
                       ? "active"
                       : generatePlan.isPending
                         ? "active"
@@ -348,7 +359,11 @@ export function ProjectDetailPage() {
                 disabled={!hasCompletedScan}
                 action={
                   <div className="flex items-center gap-2">
-                    {hasPlan ? (
+                    {planIsGenerating ? (
+                      <span className="flex items-center gap-2 text-xs text-brand-700 px-3 py-1.5">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating...
+                      </span>
+                    ) : hasPlan ? (
                       <Link
                         to={`/projects/${project.id}/plans/${(hasPlanApproved ? approvedPlan! : latestPlan!).id}`}
                         className="btn-primary text-xs px-3 py-1.5 no-underline"
