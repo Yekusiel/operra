@@ -1,5 +1,5 @@
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ArrowLeft,
   Scan,
@@ -65,6 +65,31 @@ export function ProjectDetailPage() {
 
   const [workflowOpen, setWorkflowOpen] = useState(true);
 
+  // Load persisted state on mount
+  useEffect(() => {
+    if (!id) return;
+    // Load latest deployment
+    api.listDeployments(id).then((deps) => {
+      if (deps.length > 0) {
+        setDeployment(deps[0]);
+      }
+    });
+    // Load AWS connection
+    api.getAwsConnection(id).then(setAwsConn);
+  }, [id]);
+
+  // Check if IaC files exist when we have a project
+  useEffect(() => {
+    if (!project) return;
+    // Simple check: if infrastructure dir has been used, mark IaC as generated
+    // We infer from having an approved plan + a deployment record
+    if (deployment && (deployment.status === "awaiting_approval" || deployment.status === "approved" || deployment.status === "completed")) {
+      if (!iacResult) {
+        setIacResult({ files: ["(previously generated)"], dir: project.repo_path + "/infrastructure" });
+      }
+    }
+  }, [project, deployment]);
+
   const hasCompletedScan = scans?.some((s) => s.status === "completed");
   const hasCompletedQuestionnaire = questionnaire?.completed;
   const hasPlan = latestPlan?.status === "completed";
@@ -72,10 +97,6 @@ export function ProjectDetailPage() {
   const hasPlanApproved = !!approvedPlan;
   const hasIac = !!iacResult;
 
-  // Load AWS connection on mount
-  useState(() => {
-    api.getAwsConnection(id!).then(setAwsConn);
-  });
 
   const handleTestAws = () => {
     setAwsChecking(true);
