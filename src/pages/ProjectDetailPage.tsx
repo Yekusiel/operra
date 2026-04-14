@@ -59,6 +59,7 @@ export function ProjectDetailPage() {
   const [planError, setPlanError] = useState<string | null>(null);
   const [deployError, setDeployError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+  const [dnsInfo, setDnsInfo] = useState<import("../lib/types").DnsInstructions | null>(null);
 
   const [workflowOpen, setWorkflowOpen] = useState(true);
 
@@ -592,18 +593,56 @@ export function ProjectDetailPage() {
 
               {/* Deploy result inline */}
               {deployment && deployment.status === "completed" && (
-                <div className="ml-12 rounded-lg border border-green-200 bg-green-50 p-3">
-                  <p className="text-xs font-medium text-green-800">Deployment successful</p>
-                  <p className="text-[10px] text-green-700">
-                    {deployment.completed_at ? new Date(deployment.completed_at).toLocaleString() : ""}
-                  </p>
-                  {deployment.apply_output && (
-                    <details className="mt-1.5">
-                      <summary className="text-[10px] text-green-700 cursor-pointer">Apply output</summary>
-                      <pre className="mt-1.5 rounded bg-gray-900 p-2 text-[10px] text-green-400 overflow-x-auto max-h-[300px] overflow-y-auto">
-                        {deployment.apply_output}
-                      </pre>
-                    </details>
+                <div className="ml-12 space-y-3">
+                  <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                    <p className="text-xs font-medium text-green-800">Deployment successful</p>
+                    <p className="text-[10px] text-green-700">
+                      {deployment.completed_at ? new Date(deployment.completed_at).toLocaleString() : ""}
+                    </p>
+                    {deployment.apply_output && (
+                      <details className="mt-1.5">
+                        <summary className="text-[10px] text-green-700 cursor-pointer">Apply output</summary>
+                        <pre className="mt-1.5 rounded bg-gray-900 p-2 text-[10px] text-green-400 overflow-x-auto max-h-[300px] overflow-y-auto">
+                          {deployment.apply_output}
+                        </pre>
+                      </details>
+                    )}
+                  </div>
+
+                  {/* DNS Instructions */}
+                  {!dnsInfo && project.domain && (
+                    <button
+                      className="btn-secondary text-xs w-full justify-center"
+                      onClick={() => api.getDnsInstructions(id!).then(setDnsInfo)}
+                    >
+                      Show DNS Setup Instructions
+                    </button>
+                  )}
+                  {dnsInfo && (
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                      <h4 className="text-xs font-semibold text-blue-900 mb-2">
+                        DNS Setup for {dnsInfo.domain}
+                      </h4>
+                      <div className="rounded bg-white border border-blue-100 p-3 mb-3">
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <div>
+                            <p className="text-gray-500">Type</p>
+                            <p className="font-mono font-semibold">{dnsInfo.record_type}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500">Name</p>
+                            <p className="font-mono font-semibold">{dnsInfo.record_name}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500">Value</p>
+                            <p className="font-mono font-semibold">{dnsInfo.record_value}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-xs text-blue-800 whitespace-pre-line">
+                        {dnsInfo.instructions}
+                      </p>
+                    </div>
                   )}
                 </div>
               )}

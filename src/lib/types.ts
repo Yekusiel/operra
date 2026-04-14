@@ -1,9 +1,15 @@
 export interface Project {
   id: string;
   name: string;
+  source_type: "local" | "github";
   repo_path: string;
+  github_repo: string | null;
+  github_branch: string | null;
   aws_profile: string | null;
   aws_region: string;
+  aws_access_key_id: string | null;
+  aws_secret_access_key: string | null;
+  domain: string | null;
   description: string | null;
   created_at: string;
   updated_at: string;
@@ -11,9 +17,15 @@ export interface Project {
 
 export interface CreateProjectInput {
   name: string;
-  repo_path: string;
+  source_type?: string;
+  repo_path?: string;
+  github_repo?: string;
+  github_branch?: string;
   aws_profile?: string;
   aws_region?: string;
+  aws_access_key_id?: string;
+  aws_secret_access_key?: string;
+  domain?: string;
   description?: string;
 }
 
@@ -347,6 +359,16 @@ export interface Deployment {
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
+}
+
+// ── DNS ──
+
+export interface DnsInstructions {
+  domain: string;
+  record_type: string;
+  record_name: string;
+  record_value: string;
+  instructions: string;
 }
 
 // ── Constants ──

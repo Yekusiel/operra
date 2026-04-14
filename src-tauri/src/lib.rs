@@ -64,6 +64,7 @@ pub fn run() {
             commands::deploy_commands::run_tofu_apply,
             commands::deploy_commands::get_deployment,
             commands::deploy_commands::list_deployments,
+            commands::deploy_commands::get_dns_instructions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

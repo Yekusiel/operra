@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { FolderGit2, Cloud, Clock, ChevronRight } from "lucide-react";
+import { FolderGit2, Github, Cloud, Clock, ChevronRight } from "lucide-react";
 import type { Project } from "../../lib/types";
 
 interface ProjectCardProps {
@@ -33,9 +33,12 @@ export function ProjectCard({ project }: ProjectCardProps) {
         )}
 
         <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-gray-500">
-          <span className="flex items-center gap-1 truncate" title={project.repo_path}>
-            <FolderGit2 className="h-3.5 w-3.5" />
-            {truncatePath(project.repo_path)}
+          <span className="flex items-center gap-1 truncate" title={project.source_type === "github" ? project.github_repo || "" : project.repo_path}>
+            {project.source_type === "github" ? (
+              <><Github className="h-3.5 w-3.5" />{project.github_repo}</>
+            ) : (
+              <><FolderGit2 className="h-3.5 w-3.5" />{truncatePath(project.repo_path)}</>
+            )}
           </span>
 
           {project.aws_profile && (

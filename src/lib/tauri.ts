@@ -16,6 +16,7 @@ import type {
   AwsConnection,
   IacGenerationResult,
   Deployment,
+  DnsInstructions,
 } from "./types";
 
 // ── Projects ──
@@ -146,3 +147,8 @@ export const getDeployment = (deploymentId: string) =>
 
 export const listDeployments = (projectId: string) =>
   invoke<Deployment[]>("list_deployments", { projectId });
+
+// ── DNS ──
+
+export const getDnsInstructions = (projectId: string) =>
+  invoke<DnsInstructions | null>("get_dns_instructions", { projectId });

@@ -197,6 +197,18 @@ const MIGRATIONS: &[Migration] = &[
             CREATE INDEX idx_plan_options_plan_id ON plan_options(plan_id);
         ",
     },
+    Migration {
+        version: 7,
+        name: "github_source_and_domain",
+        sql: "
+            ALTER TABLE projects ADD COLUMN source_type TEXT NOT NULL DEFAULT 'local';
+            ALTER TABLE projects ADD COLUMN github_repo TEXT;
+            ALTER TABLE projects ADD COLUMN github_branch TEXT DEFAULT 'main';
+            ALTER TABLE projects ADD COLUMN domain TEXT;
+            ALTER TABLE projects ADD COLUMN aws_access_key_id TEXT;
+            ALTER TABLE projects ADD COLUMN aws_secret_access_key TEXT;
+        ",
+    },
 ];
 
 pub fn run_all(conn: &Connection) -> Result<(), rusqlite::Error> {

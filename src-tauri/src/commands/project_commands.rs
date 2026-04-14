@@ -7,13 +7,32 @@ pub async fn create_project(
     state: tauri::State<'_, AppDb>,
     input: CreateProjectInput,
 ) -> Result<Project, String> {
-    // Validate repo path exists
-    let path = Path::new(&input.repo_path);
-    if !path.exists() {
-        return Err(format!("Repository path does not exist: {}", input.repo_path));
-    }
-    if !path.is_dir() {
-        return Err(format!("Repository path is not a directory: {}", input.repo_path));
+    let source_type = input.source_type.as_deref().unwrap_or("local");
+
+    match source_type {
+        "local" => {
+            let repo_path = input.repo_path.as_deref().unwrap_or("");
+            if repo_path.is_empty() {
+                return Err("Repository path is required for local projects.".to_string());
+            }
+            let path = Path::new(repo_path);
+            if !path.exists() {
+                return Err(format!("Repository path does not exist: {}", repo_path));
+            }
+            if !path.is_dir() {
+                return Err(format!("Repository path is not a directory: {}", repo_path));
+            }
+        }
+        "github" => {
+            let github_repo = input.github_repo.as_deref().unwrap_or("");
+            if github_repo.is_empty() {
+                return Err("GitHub repository (owner/repo) is required.".to_string());
+            }
+            if !github_repo.contains('/') {
+                return Err("GitHub repository must be in owner/repo format.".to_string());
+            }
+        }
+        _ => return Err(format!("Unknown source type: {}", source_type)),
     }
 
     let conn = state.conn.lock().map_err(|e| e.to_string())?;

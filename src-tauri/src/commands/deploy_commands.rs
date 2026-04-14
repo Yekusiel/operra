@@ -48,23 +48,43 @@ pub async fn generate_iac(
     // Build the valid resources list based on what the plan mentions
     let valid_resources = aws_resources::format_valid_resources(plan_markdown);
 
+    // Source info for provisioning
+    let source_info = if project.source_type == "github" {
+        format!(
+            "- Source: GitHub repository {}, branch {}",
+            project.github_repo.as_deref().unwrap_or("unknown"),
+            project.github_branch.as_deref().unwrap_or("main"),
+        )
+    } else {
+        format!("- Source: Local directory {}", project.repo_path)
+    };
+
+    let domain_info = match project.domain.as_deref() {
+        Some(d) if !d.is_empty() => format!("- Custom Domain: {}", d),
+        _ => "- Custom Domain: None (use IP address)".to_string(),
+    };
+
     // Build prompt asking Claude to generate OpenTofu files
     let prompt = format!(
         r#"You are an infrastructure-as-code expert. Generate OpenTofu (Terraform-compatible) files based on this infrastructure plan.
 
 ## Project
-- Name: {}
-- AWS Region: {}
-- AWS Profile: {}
+- Name: {name}
+- AWS Region: {region}
+- AWS Profile: {profile}
+{source_info}
+{domain_info}
 
 ## Infrastructure Plan
-{}
+{plan}
 
-{}
+{resources}
 
 ## Instructions
 
-Generate complete, working OpenTofu files. Output ONLY the file contents in this exact format for each file:
+Generate complete, working OpenTofu files that PROVISION THE APPLICATION -- not just create empty infrastructure.
+
+Output ONLY the file contents in this exact format for each file:
 
 === FILE: providers.tf ===
 <file contents>
@@ -78,31 +98,56 @@ Generate complete, working OpenTofu files. Output ONLY the file contents in this
 === FILE: outputs.tf ===
 <file contents>
 
-Also generate a terraform.tfvars file with sensible default values for all variables:
-
 === FILE: terraform.tfvars ===
 <variable values>
 
-Rules:
-- Use the `aws` provider with the specified region
-- Use realistic, production-ready configurations
+CRITICAL -- Application Provisioning:
+- The instance user_data MUST include a complete setup script that:
+  1. Installs required runtime (Node.js, Docker, etc.) based on the project type
+  2. {clone_instruction}
+  3. Installs dependencies (npm install, pip install, etc.)
+  4. Builds the application if needed (npm run build, etc.)
+  5. Sets up a process manager (PM2 for Node.js, systemd for others) to keep the app running
+  6. Configures a reverse proxy (Caddy preferred -- auto-HTTPS, simpler than Nginx) on port 80/443
+  7. The app should be accessible via HTTP immediately after provisioning
+- The user_data script should be a complete bash script, not a skeleton
+
+{domain_instructions}
+
+Other Rules:
 - ONLY use resource types from the Valid AWS Resource Types list above -- no exceptions
 - Pin the AWS provider to a specific version (e.g., ~> 5.0)
 - Include proper tagging (Project, ManagedBy=Operra)
 - Use variables for anything that should be configurable
 - EVERY variable MUST have a default value in variables.tf OR a value in terraform.tfvars
-- Do NOT use placeholder values like "CHANGEME" or "your-key-here" -- use real working defaults or omit the resource
-- For SSH key pairs: let AWS generate the key pair (omit public_key field) rather than requiring user to paste one
-- For passwords: use random_password resource from the random provider instead of hardcoded values
-- Include outputs for important values (endpoints, ARNs, etc.)
-- Add comments explaining non-obvious choices
-- Do NOT include any markdown formatting, explanations, or text outside the === FILE: === blocks
+- Do NOT use placeholder values like "CHANGEME" -- use real working defaults or omit
+- For SSH key pairs: use tls_private_key + aws key pair (let Terraform generate)
+- For passwords: use random_password resource from the random provider
+- Include outputs for: app URL, SSH command, static IP, and any credentials
+- Do NOT include any markdown formatting or text outside the === FILE: === blocks
 "#,
-        project.name,
-        project.aws_region,
-        project.aws_profile.as_deref().unwrap_or("default"),
-        plan_markdown,
-        valid_resources,
+        name = project.name,
+        region = project.aws_region,
+        profile = project.aws_profile.as_deref().unwrap_or("default"),
+        source_info = source_info,
+        domain_info = domain_info,
+        plan = plan_markdown,
+        resources = valid_resources,
+        clone_instruction = if project.source_type == "github" {
+            format!(
+                "Clones the repo from https://github.com/{}.git (branch: {})",
+                project.github_repo.as_deref().unwrap_or(""),
+                project.github_branch.as_deref().unwrap_or("main"),
+            )
+        } else {
+            "Receives the application code (for local projects, the code will be pushed separately)".to_string()
+        },
+        domain_instructions = match project.domain.as_deref() {
+            Some(d) if !d.is_empty() => format!(
+                "Domain Setup:\n- Configure Caddy to serve on domain: {d}\n- Caddy will auto-provision HTTPS via Let's Encrypt\n- Output DNS instructions: the user needs to point {d} to the static IP via an A record"
+            ),
+            _ => "No custom domain -- configure Caddy to serve on the IP address with HTTP only.".to_string(),
+        },
     );
 
     let adapter = ClaudeCliAdapter::default_path();
@@ -368,4 +413,68 @@ pub async fn list_deployments(
 ) -> Result<Vec<Deployment>, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     Deployment::list_for_project(&conn, &project_id).map_err(|e| e.to_string())
+}
+
+#[derive(serde::Serialize)]
+pub struct DnsInstructions {
+    pub domain: String,
+    pub record_type: String,
+    pub record_name: String,
+    pub record_value: String,
+    pub instructions: String,
+}
+
+#[tauri::command]
+pub async fn get_dns_instructions(
+    state: tauri::State<'_, AppDb>,
+    project_id: String,
+) -> Result<Option<DnsInstructions>, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let project = crate::models::project::Project::get_by_id(&conn, &project_id)
+        .map_err(|e| e.to_string())?
+        .ok_or("Project not found")?;
+
+    let domain = match project.domain.as_deref() {
+        Some(d) if !d.is_empty() => d.to_string(),
+        _ => return Ok(None),
+    };
+
+    // Try to get the static IP from the latest deployment output
+    let deployments = Deployment::list_for_project(&conn, &project_id)
+        .map_err(|e| e.to_string())?;
+    let latest_completed = deployments.iter().find(|d| d.status == "completed");
+
+    let ip = latest_completed
+        .and_then(|d| d.apply_output.as_ref())
+        .and_then(|output| {
+            // Extract IP from "static_ip = X.X.X.X" in output
+            output.lines()
+                .find(|l| l.contains("static_ip") && l.contains("="))
+                .and_then(|l| l.split('=').nth(1))
+                .map(|ip| ip.trim().trim_matches('"').to_string())
+        })
+        .unwrap_or_else(|| "YOUR_SERVER_IP".to_string());
+
+    Ok(Some(DnsInstructions {
+        domain: domain.clone(),
+        record_type: "A".to_string(),
+        record_name: if domain.starts_with("www.") {
+            domain.clone()
+        } else {
+            format!("@  (or {})", domain)
+        },
+        record_value: ip.clone(),
+        instructions: format!(
+            "To connect your domain, add this DNS record at your domain registrar:\n\n\
+             Type: A\n\
+             Name: {}\n\
+             Value: {}\n\
+             TTL: 300 (or Auto)\n\n\
+             After the DNS propagates (usually 5-30 minutes), your app will be accessible at https://{}.\n\
+             Caddy will automatically provision an SSL certificate via Let's Encrypt.",
+            if domain.starts_with("www.") { "www" } else { "@" },
+            ip,
+            domain,
+        ),
+    }))
 }
