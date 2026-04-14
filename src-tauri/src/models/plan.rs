@@ -14,6 +14,8 @@ pub struct Plan {
     pub alternatives: Option<String>,
     pub cost_notes: Option<String>,
     pub error_msg: Option<String>,
+    pub approved: bool,
+    pub approved_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -60,10 +62,32 @@ impl Plan {
         Ok(())
     }
 
+    pub fn approve(conn: &Connection, id: &str) -> Result<(), rusqlite::Error> {
+        let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        conn.execute(
+            "UPDATE plans SET approved = 1, approved_at = ?1, updated_at = ?1 WHERE id = ?2",
+            params![now, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_approved_for_project(conn: &Connection, project_id: &str) -> Result<Option<Plan>, rusqlite::Error> {
+        let mut stmt = conn.prepare(
+            "SELECT id, project_id, scan_id, questionnaire_id, status, plan_markdown,
+                    plan_json, alternatives, cost_notes, error_msg, approved, approved_at, created_at, updated_at
+             FROM plans WHERE project_id = ?1 AND approved = 1 ORDER BY approved_at DESC LIMIT 1",
+        )?;
+        let mut rows = stmt.query_map(params![project_id], Self::from_row)?;
+        match rows.next() {
+            Some(row) => Ok(Some(row?)),
+            None => Ok(None),
+        }
+    }
+
     pub fn get_by_id(conn: &Connection, id: &str) -> Result<Option<Plan>, rusqlite::Error> {
         let mut stmt = conn.prepare(
             "SELECT id, project_id, scan_id, questionnaire_id, status, plan_markdown,
-                    plan_json, alternatives, cost_notes, error_msg, created_at, updated_at
+                    plan_json, alternatives, cost_notes, error_msg, approved, approved_at, created_at, updated_at
              FROM plans WHERE id = ?1",
         )?;
         let mut rows = stmt.query_map(params![id], Self::from_row)?;
@@ -76,7 +100,7 @@ impl Plan {
     pub fn get_latest(conn: &Connection, project_id: &str) -> Result<Option<Plan>, rusqlite::Error> {
         let mut stmt = conn.prepare(
             "SELECT id, project_id, scan_id, questionnaire_id, status, plan_markdown,
-                    plan_json, alternatives, cost_notes, error_msg, created_at, updated_at
+                    plan_json, alternatives, cost_notes, error_msg, approved, approved_at, created_at, updated_at
              FROM plans WHERE project_id = ?1 ORDER BY created_at DESC LIMIT 1",
         )?;
         let mut rows = stmt.query_map(params![project_id], Self::from_row)?;
@@ -89,7 +113,7 @@ impl Plan {
     pub fn list_for_project(conn: &Connection, project_id: &str) -> Result<Vec<Plan>, rusqlite::Error> {
         let mut stmt = conn.prepare(
             "SELECT id, project_id, scan_id, questionnaire_id, status, plan_markdown,
-                    plan_json, alternatives, cost_notes, error_msg, created_at, updated_at
+                    plan_json, alternatives, cost_notes, error_msg, approved, approved_at, created_at, updated_at
              FROM plans WHERE project_id = ?1 ORDER BY created_at DESC",
         )?;
         let rows = stmt.query_map(params![project_id], Self::from_row)?;
@@ -108,8 +132,10 @@ impl Plan {
             alternatives: row.get(7)?,
             cost_notes: row.get(8)?,
             error_msg: row.get(9)?,
-            created_at: row.get(10)?,
-            updated_at: row.get(11)?,
+            approved: row.get::<_, i32>(10)? != 0,
+            approved_at: row.get(11)?,
+            created_at: row.get(12)?,
+            updated_at: row.get(13)?,
         })
     }
 }

@@ -26,6 +26,27 @@ export function usePlans(projectId: string) {
   });
 }
 
+export function useApprovedPlan(projectId: string) {
+  return useQuery({
+    queryKey: ["approvedPlan", projectId],
+    queryFn: () => api.getApprovedPlan(projectId),
+    enabled: !!projectId,
+  });
+}
+
+export function useApprovePlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (planId: string) => api.approvePlan(planId),
+    onSuccess: (plan) => {
+      qc.invalidateQueries({ queryKey: ["plan", plan.id] });
+      qc.invalidateQueries({ queryKey: ["latestPlan", plan.project_id] });
+      qc.invalidateQueries({ queryKey: ["approvedPlan", plan.project_id] });
+      qc.invalidateQueries({ queryKey: ["plans", plan.project_id] });
+    },
+  });
+}
+
 export function useGeneratePlan(projectId: string) {
   const qc = useQueryClient();
   return useMutation({

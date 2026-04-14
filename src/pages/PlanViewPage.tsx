@@ -11,10 +11,12 @@ import {
   Loader2,
   User,
   Bot,
+  CheckCircle2,
+  ShieldCheck,
 } from "lucide-react";
 import { TopBar } from "../components/layout/TopBar";
 import { useProject } from "../hooks/useProjects";
-import { usePlan, usePlanMessages, useSendPlanMessage } from "../hooks/usePlan";
+import { usePlan, usePlanMessages, useSendPlanMessage, useApprovePlan } from "../hooks/usePlan";
 
 export function PlanViewPage() {
   const { projectId, planId } = useParams<{
@@ -26,6 +28,7 @@ export function PlanViewPage() {
   const { data: plan, isLoading, error } = usePlan(planId!);
   const { data: messages } = usePlanMessages(planId!);
   const sendMessage = useSendPlanMessage(planId!);
+  const approvePlan = useApprovePlan();
 
   const [input, setInput] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -91,20 +94,66 @@ export function PlanViewPage() {
         {/* Scrollable content area */}
         <div className="flex-1 overflow-y-auto p-6">
           <div className="mx-auto max-w-4xl space-y-6">
-            {/* Status header */}
+            {/* Approval banner */}
+            {plan.status === "completed" && !plan.approved && (
+              <div className="rounded-xl border-2 border-brand-300 bg-brand-50 p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <ShieldCheck className="h-6 w-6 text-brand-600 mt-0.5" />
+                    <div>
+                      <h3 className="text-sm font-semibold text-brand-900">
+                        Review and approve this plan
+                      </h3>
+                      <p className="text-sm text-brand-700 mt-1">
+                        Read through the plan below. Use the chat to ask questions or request changes.
+                        When you're satisfied, approve it to proceed to infrastructure code generation.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    className="btn-primary shrink-0"
+                    onClick={() => approvePlan.mutate(planId!)}
+                    disabled={approvePlan.isPending}
+                  >
+                    {approvePlan.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4" />
+                    )}
+                    Approve Plan
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {plan.approved && (
+              <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+                <CheckCircle2 className="h-5 w-5 text-green-600" />
+                <div>
+                  <p className="text-sm font-medium text-green-800">Plan Approved</p>
+                  <p className="text-xs text-green-700">
+                    Approved {plan.approved_at ? new Date(plan.approved_at).toLocaleString() : ""} — ready for code generation
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Status badge */}
             <div className="flex items-center gap-4">
               <span
                 className={
-                  plan.status === "completed"
+                  plan.approved
                     ? "badge-green"
-                    : plan.status === "failed"
-                      ? "badge-red"
-                      : plan.status === "generating"
-                        ? "badge-blue"
-                        : "badge-gray"
+                    : plan.status === "completed"
+                      ? "badge-yellow"
+                      : plan.status === "failed"
+                        ? "badge-red"
+                        : plan.status === "generating"
+                          ? "badge-blue"
+                          : "badge-gray"
                 }
               >
-                {plan.status}
+                {plan.approved ? "approved" : plan.status}
               </span>
               <span className="flex items-center gap-1 text-xs text-gray-500">
                 <Clock className="h-3.5 w-3.5" />

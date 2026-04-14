@@ -169,6 +169,14 @@ const MIGRATIONS: &[Migration] = &[
             CREATE UNIQUE INDEX idx_aws_conn_project_id ON aws_connections(project_id);
         ",
     },
+    Migration {
+        version: 5,
+        name: "plan_approval",
+        sql: "
+            ALTER TABLE plans ADD COLUMN approved INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE plans ADD COLUMN approved_at TEXT;
+        ",
+    },
 ];
 
 pub fn run_all(conn: &Connection) -> Result<(), rusqlite::Error> {

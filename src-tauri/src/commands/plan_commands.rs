@@ -141,6 +141,27 @@ pub async fn list_plans(
     Plan::list_for_project(&conn, &project_id).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub async fn approve_plan(
+    state: tauri::State<'_, AppDb>,
+    plan_id: String,
+) -> Result<Plan, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    Plan::approve(&conn, &plan_id).map_err(|e| e.to_string())?;
+    Plan::get_by_id(&conn, &plan_id)
+        .map_err(|e| e.to_string())?
+        .ok_or("Plan not found after approval".to_string())
+}
+
+#[tauri::command]
+pub async fn get_approved_plan(
+    state: tauri::State<'_, AppDb>,
+    project_id: String,
+) -> Result<Option<Plan>, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    Plan::get_approved_for_project(&conn, &project_id).map_err(|e| e.to_string())
+}
+
 fn build_plan_prompt(
     project: &Project,
     scan_findings: &[ScanFinding],

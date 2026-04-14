@@ -44,6 +44,8 @@ pub fn run() {
             commands::plan_commands::get_plan,
             commands::plan_commands::get_latest_plan,
             commands::plan_commands::list_plans,
+            commands::plan_commands::approve_plan,
+            commands::plan_commands::get_approved_plan,
             commands::plan_commands::send_plan_message,
             commands::plan_commands::get_plan_messages,
             // Tools & AWS

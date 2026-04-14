@@ -84,6 +84,12 @@ export const getLatestPlan = (projectId: string) =>
 export const listPlans = (projectId: string) =>
   invoke<Plan[]>("list_plans", { projectId });
 
+export const approvePlan = (planId: string) =>
+  invoke<Plan>("approve_plan", { planId });
+
+export const getApprovedPlan = (projectId: string) =>
+  invoke<Plan | null>("get_approved_plan", { projectId });
+
 // ── Plan Chat ──
 
 export const sendPlanMessage = (planId: string, message: string) =>

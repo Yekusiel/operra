@@ -23,7 +23,7 @@ import { ScanProgressIndicator } from "../components/scanner/ScanProgress";
 import { useProject, useDeleteProject } from "../hooks/useProjects";
 import { useScan, useScansForProject } from "../hooks/useScan";
 import { useQuestionnaire } from "../hooks/useQuestionnaire";
-import { useLatestPlan, useGeneratePlan } from "../hooks/usePlan";
+import { useLatestPlan, useGeneratePlan, useApprovedPlan } from "../hooks/usePlan";
 import * as api from "../lib/tauri";
 import type { AwsConnection } from "../lib/types";
 
@@ -36,6 +36,7 @@ export function ProjectDetailPage() {
   const { data: scans } = useScansForProject(id!);
   const { data: questionnaire } = useQuestionnaire(id!);
   const { data: latestPlan } = useLatestPlan(id!);
+  const { data: approvedPlan } = useApprovedPlan(id!);
   const generatePlan = useGeneratePlan(id!);
 
   const [awsConn, setAwsConn] = useState<AwsConnection | null>(null);
@@ -51,6 +52,7 @@ export function ProjectDetailPage() {
   const hasCompletedScan = scans?.some((s) => s.status === "completed");
   const hasCompletedQuestionnaire = questionnaire?.completed;
   const hasPlan = latestPlan?.status === "completed";
+  const hasPlanApproved = !!approvedPlan;
   const hasIac = !!iacResult;
 
   // Load AWS connection on mount
@@ -249,31 +251,55 @@ export function ProjectDetailPage() {
               }
             />
 
-            {/* Step 3: Generate Plan */}
+            {/* Step 3: Generate & Approve Plan */}
             <WorkflowStep
               step={3}
-              title="Generate Infrastructure Plan"
-              description="Use AI to create a tailored AWS architecture plan"
+              title={hasPlanApproved ? "Plan Approved" : hasPlan ? "Review & Approve Plan" : "Generate Infrastructure Plan"}
+              description={
+                hasPlanApproved
+                  ? "Plan approved and ready for code generation"
+                  : hasPlan
+                    ? "Review the plan, chat with the AI, then approve it"
+                    : "Use AI to create a tailored AWS architecture plan"
+              }
               status={
-                latestPlan?.status === "completed"
+                hasPlanApproved
                   ? "completed"
-                  : generatePlan.isPending
+                  : hasPlan
                     ? "active"
-                    : "pending"
+                    : generatePlan.isPending
+                      ? "active"
+                      : "pending"
               }
               disabled={!hasCompletedScan}
               action={
-                <button
-                  className="btn-primary text-xs px-3 py-1.5"
-                  onClick={handleGeneratePlan}
-                  disabled={!hasCompletedScan || generatePlan.isPending}
-                >
-                  {generatePlan.isPending ? (
-                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating...</>
-                  ) : (
-                    <><Cpu className="h-3.5 w-3.5" /> Generate Plan</>
-                  )}
-                </button>
+                hasPlan && !hasPlanApproved ? (
+                  <Link
+                    to={`/projects/${project.id}/plans/${latestPlan!.id}`}
+                    className="btn-primary text-xs px-3 py-1.5 no-underline"
+                  >
+                    <FileText className="h-3.5 w-3.5" /> Review & Approve
+                  </Link>
+                ) : hasPlanApproved ? (
+                  <Link
+                    to={`/projects/${project.id}/plans/${approvedPlan!.id}`}
+                    className="btn-secondary text-xs px-3 py-1.5 no-underline"
+                  >
+                    <FileText className="h-3.5 w-3.5" /> View Plan
+                  </Link>
+                ) : (
+                  <button
+                    className="btn-primary text-xs px-3 py-1.5"
+                    onClick={handleGeneratePlan}
+                    disabled={!hasCompletedScan || generatePlan.isPending}
+                  >
+                    {generatePlan.isPending ? (
+                      <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating...</>
+                    ) : (
+                      <><Cpu className="h-3.5 w-3.5" /> Generate Plan</>
+                    )}
+                  </button>
+                )
               }
             />
 
@@ -281,14 +307,14 @@ export function ProjectDetailPage() {
             <WorkflowStep
               step={4}
               title="Generate Infrastructure Code"
-              description="Create OpenTofu files from the approved plan"
+              description={hasPlanApproved ? "Create OpenTofu files from the approved plan" : "Approve a plan first to unlock this step"}
               status={hasIac ? "completed" : iacGenerating ? "active" : "pending"}
-              disabled={!hasPlan}
+              disabled={!hasPlanApproved}
               action={
                 <button
                   className="btn-primary text-xs px-3 py-1.5"
                   onClick={handleGenerateIac}
-                  disabled={!hasPlan || iacGenerating}
+                  disabled={!hasPlanApproved || iacGenerating}
                 >
                   {iacGenerating ? (
                     <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating...</>

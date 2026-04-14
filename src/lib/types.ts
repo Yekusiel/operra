@@ -256,6 +256,8 @@ export interface Plan {
   alternatives: string | null;
   cost_notes: string | null;
   error_msg: string | null;
+  approved: boolean;
+  approved_at: string | null;
   created_at: string;
   updated_at: string;
 }
