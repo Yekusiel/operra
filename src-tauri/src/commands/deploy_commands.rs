@@ -3,6 +3,7 @@ use crate::models::deployment::Deployment;
 use crate::models::plan::Plan;
 use crate::models::plan_option::PlanOption;
 use crate::adapters::claude::ClaudeCliAdapter;
+use crate::tools::aws_resources;
 use crate::tools::tofu;
 use std::path::{Path, PathBuf};
 
@@ -44,6 +45,9 @@ pub async fn generate_iac(
         plan.plan_markdown.as_deref().ok_or("Plan has no content")?
     };
 
+    // Build the valid resources list based on what the plan mentions
+    let valid_resources = aws_resources::format_valid_resources(plan_markdown);
+
     // Build prompt asking Claude to generate OpenTofu files
     let prompt = format!(
         r#"You are an infrastructure-as-code expert. Generate OpenTofu (Terraform-compatible) files based on this infrastructure plan.
@@ -54,6 +58,8 @@ pub async fn generate_iac(
 - AWS Profile: {}
 
 ## Infrastructure Plan
+{}
+
 {}
 
 ## Instructions
@@ -80,9 +86,8 @@ Also generate a terraform.tfvars file with sensible default values for all varia
 Rules:
 - Use the `aws` provider with the specified region
 - Use realistic, production-ready configurations
-- ONLY use well-established AWS provider resource types that you are certain exist
-- Do NOT invent or guess resource type names -- if unsure whether a resource exists, omit it
-- Pin the AWS provider to a specific version (e.g., ~> 5.0) to avoid compatibility issues
+- ONLY use resource types from the Valid AWS Resource Types list above -- no exceptions
+- Pin the AWS provider to a specific version (e.g., ~> 5.0)
 - Include proper tagging (Project, ManagedBy=Operra)
 - Use variables for anything that should be configurable
 - EVERY variable MUST have a default value in variables.tf OR a value in terraform.tfvars
@@ -94,6 +99,7 @@ Rules:
         project.aws_region,
         project.aws_profile.as_deref().unwrap_or("default"),
         plan_markdown,
+        valid_resources,
     );
 
     let adapter = ClaudeCliAdapter::default_path();
