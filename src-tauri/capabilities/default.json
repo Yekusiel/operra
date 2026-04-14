@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicegui-org/nicegui/main/nicegui/templates/tauri_capabilities_schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "dialog:allow-open",
+    "shell:default",
+    "shell:allow-open"
+  ]
+}

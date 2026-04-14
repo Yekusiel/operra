@@ -1,0 +1,29 @@
+[package]
+name = "operra"
+version = "0.1.0"
+description = "Local control-plane for AWS infrastructure management"
+authors = ["Operra"]
+edition = "2021"
+
+[lib]
+name = "operra_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.31", features = ["bundled"] }
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+tokio = { version = "1", features = ["fs", "process", "sync"] }
+walkdir = "2"
+glob = "0.3"
+async-trait = "0.1"
+log = "0.4"
+env_logger = "0.11"
