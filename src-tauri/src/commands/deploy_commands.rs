@@ -102,20 +102,24 @@ Output ONLY the file contents in this exact format for each file:
 <variable values>
 
 CRITICAL -- Application Provisioning:
-- The instance user_data MUST include a complete setup script that:
-  1. Installs required runtime (Node.js, Docker, etc.) based on the project type
+- The instance user_data MUST be an INLINE heredoc string in the .tf file (<<-EOF ... EOF)
+- Do NOT use templatefile() or reference external .tftpl files -- everything must be self-contained in the .tf files
+- The user_data script MUST:
+  1. Install required runtime (Node.js, Docker, etc.) based on the project type
   2. {clone_instruction}
-  3. Installs dependencies (npm install, pip install, etc.)
-  4. Builds the application if needed (npm run build, etc.)
-  5. Sets up a process manager (PM2 for Node.js, systemd for others) to keep the app running
-  6. Configures a reverse proxy (Caddy preferred -- auto-HTTPS, simpler than Nginx) on port 80/443
+  3. Install dependencies (npm install, pip install, etc.)
+  4. Build the application if needed (npm run build, etc.)
+  5. Set up a process manager (PM2 for Node.js, systemd for others) to keep the app running
+  6. Configure a reverse proxy (Caddy preferred -- auto-HTTPS, simpler than Nginx) on port 80/443
   7. The app should be accessible via HTTP immediately after provisioning
 - The user_data script should be a complete bash script, not a skeleton
+- Use $${variable} syntax (double dollar) for bash variables inside heredoc to avoid Terraform interpolation conflicts
 
 {domain_instructions}
 
 Other Rules:
 - ONLY use resource types from the Valid AWS Resource Types list above -- no exceptions
+- For aws_s3_bucket_lifecycle_configuration: every rule block MUST include a filter block (use filter {} for apply-to-all)
 - Pin the AWS provider to a specific version (e.g., ~> 5.0)
 - Include proper tagging (Project, ManagedBy=Operra)
 - Use variables for anything that should be configurable
