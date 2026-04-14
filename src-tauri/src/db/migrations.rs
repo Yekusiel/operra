@@ -202,10 +202,40 @@ const MIGRATIONS: &[Migration] = &[
         name: "github_source_and_domain",
         sql: "
             ALTER TABLE projects ADD COLUMN source_type TEXT NOT NULL DEFAULT 'local';
+        ",
+    },
+    Migration {
+        version: 8,
+        name: "github_source_fields",
+        sql: "
             ALTER TABLE projects ADD COLUMN github_repo TEXT;
+        ",
+    },
+    Migration {
+        version: 9,
+        name: "github_branch",
+        sql: "
             ALTER TABLE projects ADD COLUMN github_branch TEXT DEFAULT 'main';
+        ",
+    },
+    Migration {
+        version: 10,
+        name: "project_domain",
+        sql: "
             ALTER TABLE projects ADD COLUMN domain TEXT;
+        ",
+    },
+    Migration {
+        version: 11,
+        name: "project_aws_keys",
+        sql: "
             ALTER TABLE projects ADD COLUMN aws_access_key_id TEXT;
+        ",
+    },
+    Migration {
+        version: 12,
+        name: "project_aws_secret",
+        sql: "
             ALTER TABLE projects ADD COLUMN aws_secret_access_key TEXT;
         ",
     },
