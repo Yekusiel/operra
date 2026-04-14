@@ -508,31 +508,24 @@ pub async fn get_dns_instructions(
     state: tauri::State<'_, AppDb>,
     project_id: String,
 ) -> Result<Option<DnsInstructions>, String> {
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    let project = crate::models::project::Project::get_by_id(&conn, &project_id)
-        .map_err(|e| e.to_string())?
-        .ok_or("Project not found")?;
+    let (domain, infra_dir) = {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        let project = crate::models::project::Project::get_by_id(&conn, &project_id)
+            .map_err(|e| e.to_string())?
+            .ok_or("Project not found")?;
 
-    let domain = match project.domain.as_deref() {
-        Some(d) if !d.is_empty() => d.to_string(),
-        _ => return Ok(None),
+        let domain = match project.domain.as_deref() {
+            Some(d) if !d.is_empty() => d.to_string(),
+            _ => return Ok(None),
+        };
+
+        let infra_dir = PathBuf::from(&project.repo_path).join("infrastructure");
+        (domain, infra_dir)
     };
 
-    // Try to get the static IP from the latest deployment output
-    let deployments = Deployment::list_for_project(&conn, &project_id)
-        .map_err(|e| e.to_string())?;
-    let latest_completed = deployments.iter().find(|d| d.status == "completed");
-
-    let ip = latest_completed
-        .and_then(|d| d.apply_output.as_ref())
-        .and_then(|output| {
-            // Extract IP from "static_ip = X.X.X.X" in output
-            output.lines()
-                .find(|l| l.contains("static_ip") && l.contains("="))
-                .and_then(|l| l.split('=').nth(1))
-                .map(|ip| ip.trim().trim_matches('"').to_string())
-        })
-        .unwrap_or_else(|| "YOUR_SERVER_IP".to_string());
+    // Get the actual IP from tofu state (most reliable)
+    let ip = get_tofu_output_sensitive(&infra_dir, "static_ip").await
+        .unwrap_or_else(|_| "YOUR_SERVER_IP".to_string());
 
     Ok(Some(DnsInstructions {
         domain: domain.clone(),
