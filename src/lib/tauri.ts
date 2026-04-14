@@ -85,6 +85,9 @@ export const getLatestPlan = (projectId: string) =>
 export const listPlans = (projectId: string) =>
   invoke<Plan[]>("list_plans", { projectId });
 
+export const generateAdditionalOption = (planId: string, userRequest?: string) =>
+  invoke<import("./types").PlanOption>("generate_additional_option", { planId, userRequest: userRequest || null });
+
 export const approvePlan = (planId: string) =>
   invoke<Plan>("approve_plan", { planId });
 

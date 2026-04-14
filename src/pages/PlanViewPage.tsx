@@ -10,6 +10,7 @@ import {
   Bot,
   CheckCircle2,
   Shield,
+  Plus,
 } from "lucide-react";
 import { TopBar } from "../components/layout/TopBar";
 import { useProject } from "../hooks/useProjects";
@@ -19,6 +20,7 @@ import {
   useSendPlanMessage,
   usePlanOptions,
   useApprovePlanOption,
+  useGenerateAdditionalOption,
 } from "../hooks/usePlan";
 
 export function PlanViewPage() {
@@ -33,6 +35,7 @@ export function PlanViewPage() {
   const { data: messages } = usePlanMessages(planId!);
   const sendMessage = useSendPlanMessage(planId!);
   const approveOption = useApprovePlanOption(planId!);
+  const addOption = useGenerateAdditionalOption(planId!);
 
   const [input, setInput] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -111,7 +114,11 @@ export function PlanViewPage() {
                         : "badge-blue"
                 }
               >
-                {hasApprovedOption ? "plan approved" : plan.status}
+                {hasApprovedOption
+                  ? "plan approved"
+                  : plan.status === "generating"
+                    ? "generating options..."
+                    : plan.status}
               </span>
               <span className="flex items-center gap-1 text-xs text-gray-500">
                 <Clock className="h-3.5 w-3.5" />
@@ -135,7 +142,7 @@ export function PlanViewPage() {
               </div>
             )}
 
-            {/* Instruction banner when no option approved yet */}
+            {/* Instruction banner */}
             {plan.status === "completed" && !hasApprovedOption && hasOptions && (
               <div className="rounded-xl border-2 border-brand-200 bg-brand-50 p-4">
                 <div className="flex items-start gap-3">
@@ -145,8 +152,8 @@ export function PlanViewPage() {
                       Choose a plan to approve
                     </p>
                     <p className="text-sm text-brand-700 mt-0.5">
-                      Review the options below, use the chat to ask questions or
-                      request changes, then approve the plan you want to build.
+                      Review the options below, use the chat to ask questions,
+                      or add another option. Approve the one you want to build.
                     </p>
                   </div>
                 </div>
@@ -182,7 +189,7 @@ export function PlanViewPage() {
                         </h3>
                         {option.source === "chat" && (
                           <span className="text-[10px] text-gray-400 uppercase tracking-wider">
-                            Added from conversation
+                            Added by request
                           </span>
                         )}
                       </div>
@@ -225,12 +232,30 @@ export function PlanViewPage() {
                 </div>
               ))}
 
-            {/* Fallback: show raw plan if no options were parsed */}
-            {!hasOptions && plan.plan_markdown && (
-              <div className="card">
-                <div className="prose prose-sm max-w-none">
-                  <MarkdownRenderer content={plan.plan_markdown} />
-                </div>
+            {/* Add Another Option button */}
+            {plan.status === "completed" && (
+              <button
+                className="btn-secondary w-full justify-center py-3"
+                onClick={() => addOption.mutate(undefined)}
+                disabled={addOption.isPending}
+              >
+                {addOption.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Generating another option...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4" />
+                    Add Another Option
+                  </>
+                )}
+              </button>
+            )}
+
+            {addOption.error && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                Failed to generate option: {String(addOption.error)}
               </div>
             )}
 
@@ -324,7 +349,7 @@ export function PlanViewPage() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Ask about the plans, request changes, or suggest a new approach..."
+                  placeholder="Ask questions about the plans, compare options, discuss tradeoffs..."
                   className="input min-h-[44px] max-h-[120px] resize-none flex-1"
                   rows={1}
                   disabled={sendMessage.isPending}
@@ -342,7 +367,7 @@ export function PlanViewPage() {
                 </button>
               </div>
               <p className="text-[10px] text-gray-400 mt-1.5">
-                Press Enter to send, Shift+Enter for new line. New plans mentioned in chat will appear as options above.
+                Press Enter to send. Use "Add Another Option" above to generate a new plan.
               </p>
             </div>
           </div>

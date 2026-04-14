@@ -74,6 +74,16 @@ export function useApprovePlanOption(planId: string) {
   });
 }
 
+export function useGenerateAdditionalOption(planId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userRequest?: string) => api.generateAdditionalOption(planId, userRequest),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["planOptions", planId] });
+    },
+  });
+}
+
 export function useGeneratePlan(projectId: string) {
   const qc = useQueryClient();
   return useMutation({
