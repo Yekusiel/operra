@@ -569,36 +569,43 @@ pub async fn get_cicd_secrets(
     state: tauri::State<'_, AppDb>,
     project_id: String,
 ) -> Result<Option<CiCdSecrets>, String> {
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    let project = crate::models::project::Project::get_by_id(&conn, &project_id)
-        .map_err(|e| e.to_string())?
-        .ok_or("Project not found")?;
+    // Gather everything from DB first, then drop the lock before await
+    let (project, server_ip, ssh_user, infra_dir) = {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        let project = crate::models::project::Project::get_by_id(&conn, &project_id)
+            .map_err(|e| e.to_string())?
+            .ok_or("Project not found")?;
 
-    // Only for GitHub projects
-    let github_repo = match project.github_repo.as_deref() {
-        Some(r) if !r.is_empty() => r.to_string(),
-        _ => return Ok(None),
+        let github_repo = match project.github_repo.as_deref() {
+            Some(r) if !r.is_empty() => r.to_string(),
+            _ => return Ok(None),
+        };
+        let _ = github_repo; // used later via project
+
+        let deployments = Deployment::list_for_project(&conn, &project_id)
+            .map_err(|e| e.to_string())?;
+        let latest_completed = deployments.iter().find(|d| d.status == "completed");
+
+        let apply_output = match latest_completed.and_then(|d| d.apply_output.as_ref()) {
+            Some(o) => o.clone(),
+            None => return Ok(None),
+        };
+
+        let server_ip = extract_output_value(&apply_output, "static_ip")
+            .unwrap_or_else(|| "COULD_NOT_EXTRACT".to_string());
+
+        let ssh_user = extract_output_value(&apply_output, "ssh_user")
+            .or_else(|| extract_ssh_user_from_command(&apply_output))
+            .unwrap_or_else(|| "ubuntu".to_string());
+
+        let infra_dir = PathBuf::from(&project.repo_path).join("infrastructure");
+
+        (project, server_ip, ssh_user, infra_dir)
     };
+    // Lock is dropped here -- safe to await
 
-    let deployments = Deployment::list_for_project(&conn, &project_id)
-        .map_err(|e| e.to_string())?;
-    let latest_completed = deployments.iter().find(|d| d.status == "completed");
+    let github_repo = project.github_repo.as_deref().unwrap_or("").to_string();
 
-    let apply_output = match latest_completed.and_then(|d| d.apply_output.as_ref()) {
-        Some(o) => o,
-        None => return Ok(None),
-    };
-
-    // Extract values from tofu output
-    let server_ip = extract_output_value(apply_output, "static_ip")
-        .unwrap_or_else(|| "COULD_NOT_EXTRACT".to_string());
-
-    let ssh_user = extract_output_value(apply_output, "ssh_user")
-        .or_else(|| extract_ssh_user_from_command(apply_output))
-        .unwrap_or_else(|| "ubuntu".to_string());
-
-    // Get the SSH private key from tofu output
-    let infra_dir = PathBuf::from(&project.repo_path).join("infrastructure");
     let ssh_key = get_tofu_output_sensitive(&infra_dir, "ssh_private_key").await
         .unwrap_or_else(|_| "Run: cd infrastructure && tofu output -raw ssh_private_key".to_string());
 
