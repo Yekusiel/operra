@@ -80,6 +80,9 @@ Also generate a terraform.tfvars file with sensible default values for all varia
 Rules:
 - Use the `aws` provider with the specified region
 - Use realistic, production-ready configurations
+- ONLY use well-established AWS provider resource types that you are certain exist
+- Do NOT invent or guess resource type names -- if unsure whether a resource exists, omit it
+- Pin the AWS provider to a specific version (e.g., ~> 5.0) to avoid compatibility issues
 - Include proper tagging (Project, ManagedBy=Operra)
 - Use variables for anything that should be configurable
 - EVERY variable MUST have a default value in variables.tf OR a value in terraform.tfvars

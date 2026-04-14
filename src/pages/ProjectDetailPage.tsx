@@ -516,6 +516,16 @@ export function ProjectDetailPage() {
                 </div>
               )}
 
+              {/* Tofu plan failed (not yet approved = failed at review stage) */}
+              {deployment && deployment.status === "failed" && !deployment.approved && (
+                <div className="ml-12 rounded-lg border border-red-200 bg-red-50 p-3">
+                  <p className="text-xs font-medium text-red-800">Plan review failed</p>
+                  <pre className="mt-1.5 rounded bg-gray-900 p-2 text-[10px] text-red-400 overflow-x-auto max-h-[300px] overflow-y-auto">
+                    {deployment.error_msg}
+                  </pre>
+                </div>
+              )}
+
               {/* Deployment review inline */}
               {deployment && deployment.status === "awaiting_approval" && (
                 <div className="ml-12 rounded-lg border border-yellow-200 bg-yellow-50 p-3">
@@ -598,7 +608,7 @@ export function ProjectDetailPage() {
                 </div>
               )}
 
-              {deployment && deployment.status === "failed" && (
+              {deployment && deployment.status === "failed" && deployment.approved && (
                 <div className="ml-12 rounded-lg border border-red-200 bg-red-50 p-3">
                   <p className="text-xs font-medium text-red-800">Deployment failed</p>
                   <pre className="mt-1.5 rounded bg-gray-900 p-2 text-[10px] text-red-400 overflow-x-auto max-h-[300px] overflow-y-auto">
