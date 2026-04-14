@@ -567,7 +567,7 @@ pub async fn get_cicd_secrets(
     project_id: String,
 ) -> Result<Option<CiCdSecrets>, String> {
     // Gather everything from DB first, then drop the lock before await
-    let (project, server_ip, ssh_user, infra_dir) = {
+    let (project, infra_dir) = {
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
         let project = crate::models::project::Project::get_by_id(&conn, &project_id)
             .map_err(|e| e.to_string())?
@@ -588,23 +588,23 @@ pub async fn get_cicd_secrets(
             None => return Ok(None),
         };
 
-        let server_ip = extract_output_value(&apply_output, "static_ip")
-            .unwrap_or_else(|| "COULD_NOT_EXTRACT".to_string());
-
-        let ssh_user = extract_output_value(&apply_output, "ssh_user")
-            .or_else(|| extract_ssh_user_from_command(&apply_output))
-            .unwrap_or_else(|| "ubuntu".to_string());
-
         let infra_dir = PathBuf::from(&project.repo_path).join("infrastructure");
 
-        (project, server_ip, ssh_user, infra_dir)
+        (project, infra_dir)
     };
     // Lock is dropped here -- safe to await
 
     let github_repo = project.github_repo.as_deref().unwrap_or("").to_string();
 
+    // Get all values from tofu state (reliable, not from log parsing)
+    let server_ip = get_tofu_output_sensitive(&infra_dir, "static_ip").await
+        .unwrap_or_else(|_| "COULD_NOT_EXTRACT".to_string());
+
     let ssh_key = get_tofu_output_sensitive(&infra_dir, "ssh_private_key").await
         .unwrap_or_else(|_| "Run: cd infrastructure && tofu output -raw ssh_private_key".to_string());
+
+    // Default to ubuntu -- this is correct for Ubuntu AMIs and Lightsail
+    let ssh_user = "ubuntu".to_string();
 
     Ok(Some(CiCdSecrets {
         secrets_url: format!("https://github.com/{}/settings/secrets/actions", github_repo),
