@@ -232,31 +232,13 @@ export function PlanViewPage() {
                 </div>
               ))}
 
-            {/* Add Another Option button */}
+            {/* Add Another Option */}
             {plan.status === "completed" && (
-              <button
-                className="btn-secondary w-full justify-center py-3"
-                onClick={() => addOption.mutate(undefined)}
-                disabled={addOption.isPending}
-              >
-                {addOption.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Generating another option...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="h-4 w-4" />
-                    Add Another Option
-                  </>
-                )}
-              </button>
-            )}
-
-            {addOption.error && (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                Failed to generate option: {String(addOption.error)}
-              </div>
+              <AddOptionSection
+                isPending={addOption.isPending}
+                error={addOption.error ? String(addOption.error) : null}
+                onGenerate={(request) => addOption.mutate(request || undefined)}
+              />
             )}
 
             {/* Chat messages */}
@@ -367,13 +349,91 @@ export function PlanViewPage() {
                 </button>
               </div>
               <p className="text-[10px] text-gray-400 mt-1.5">
-                Press Enter to send. Use "Add Another Option" above to generate a new plan.
+                Press Enter to send. To generate a new plan option, use "Add Another Option" above.
               </p>
             </div>
           </div>
         )}
       </div>
     </>
+  );
+}
+
+function AddOptionSection({
+  isPending,
+  error,
+  onGenerate,
+}: {
+  isPending: boolean;
+  error: string | null;
+  onGenerate: (request: string | null) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [request, setRequest] = useState("");
+
+  const handleGenerate = () => {
+    onGenerate(request.trim() || null);
+    setRequest("");
+    setExpanded(false);
+  };
+
+  if (isPending) {
+    return (
+      <div className="card border-brand-200 bg-brand-50/30">
+        <div className="flex items-center justify-center gap-3 py-2">
+          <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
+          <p className="text-sm text-brand-700">Generating another option...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {!expanded ? (
+        <button
+          className="btn-secondary w-full justify-center py-3"
+          onClick={() => setExpanded(true)}
+        >
+          <Plus className="h-4 w-4" />
+          Add Another Option
+        </button>
+      ) : (
+        <div className="card border-brand-200">
+          <p className="text-sm font-medium text-gray-900 mb-2">
+            Generate another plan option
+          </p>
+          <textarea
+            className="input min-h-[60px] resize-y mb-3"
+            placeholder="Describe what you want (optional). E.g., 'a serverless approach', 'something cheaper', 'use Kubernetes'... Leave blank for the AI to decide."
+            value={request}
+            onChange={(e) => setRequest(e.target.value)}
+            rows={2}
+          />
+          <div className="flex items-center gap-2">
+            <button className="btn-primary text-xs px-3 py-1.5" onClick={handleGenerate}>
+              <Plus className="h-3.5 w-3.5" />
+              Generate
+            </button>
+            <button
+              className="btn-secondary text-xs px-3 py-1.5"
+              onClick={() => {
+                setExpanded(false);
+                setRequest("");
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          Failed to generate option: {error}
+        </div>
+      )}
+    </div>
   );
 }
 
