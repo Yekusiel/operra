@@ -161,7 +161,7 @@ fn build_plan_prompt(
     // Scan findings
     if !scan_findings.is_empty() {
         prompt.push_str("## Detected Technologies\n");
-        let categories = ["language", "framework", "infrastructure", "config", "ci_cd"];
+        let categories = ["language", "framework", "database", "queue", "infrastructure", "config", "ci_cd"];
         for cat in &categories {
             let findings: Vec<&ScanFinding> = scan_findings.iter().filter(|f| f.category == *cat).collect();
             if !findings.is_empty() {
@@ -170,6 +170,8 @@ fn build_plan_prompt(
                     "framework" => "Frameworks",
                     "infrastructure" => "Existing Infrastructure",
                     "config" => "Configuration",
+                    "database" => "Databases",
+                    "queue" => "Queues & Background Jobs",
                     "ci_cd" => "CI/CD",
                     _ => cat,
                 };
@@ -189,7 +191,9 @@ fn build_plan_prompt(
     // Questionnaire answers
     if let Some(ref q) = questionnaire {
         if q.completed {
-            prompt.push_str("## Architecture Requirements (User Answers)\n");
+            let mut explicit = Vec::new();
+            let mut infer = Vec::new();
+
             if let Ok(answers) = serde_json::from_str::<serde_json::Value>(&q.answers_json) {
                 if let Some(obj) = answers.as_object() {
                     for (key, value) in obj {
@@ -207,14 +211,32 @@ fn build_plan_prompt(
                             .join(" ");
 
                         if let Some(v) = value.as_str() {
-                            if !v.is_empty() {
-                                prompt.push_str(&format!("- {}: {}\n", label, v));
+                            if v == "unknown" {
+                                infer.push(label);
+                            } else if !v.is_empty() {
+                                explicit.push(format!("- {}: {}", label, v));
                             }
                         }
                     }
                 }
             }
-            prompt.push_str("\n");
+
+            if !explicit.is_empty() {
+                prompt.push_str("## Architecture Requirements (User Answers)\n");
+                for line in &explicit {
+                    prompt.push_str(line);
+                    prompt.push('\n');
+                }
+                prompt.push('\n');
+            }
+
+            if !infer.is_empty() {
+                prompt.push_str("## Decisions to Infer\nThe user was not sure about the following. Use the detected technologies and codebase context to make the best decision and explain your reasoning:\n");
+                for item in &infer {
+                    prompt.push_str(&format!("- {}\n", item));
+                }
+                prompt.push('\n');
+            }
         }
     }
 
