@@ -415,8 +415,8 @@ pub async fn send_plan_message(
             let assistant_msg = PlanMessage::create(&conn, &plan_id, "assistant", &response)
                 .map_err(|e| e.to_string())?;
 
-            // Check if the response contains new plan options
-            let new_options = plan_option::parse_plan_options(&response);
+            // Check if the response contains new plan options (relaxed parsing for chat)
+            let new_options = plan_option::parse_plan_options_relaxed(&response);
             if !new_options.is_empty() {
                 for (_label, title, content) in &new_options {
                     // Use next available label to avoid duplicates

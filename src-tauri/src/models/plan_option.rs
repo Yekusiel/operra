@@ -134,10 +134,19 @@ const STOP_HEADINGS: &[&str] = &[
     "final thoughts",
 ];
 
-/// Parse plan options from AI response text.
-/// Only matches lines that are markdown headings starting with "Plan [A-Z]:".
-/// Stops collecting when it hits a non-plan heading section.
+/// Parse plan options from AI response text (strict mode for initial generation).
+/// Only matches lines that are markdown headings starting with "## Plan [A-Z]:".
 pub fn parse_plan_options(text: &str) -> Vec<(String, String, String)> {
+    parse_plan_options_inner(text, true)
+}
+
+/// Parse plan options with relaxed matching (for chat responses).
+/// Also matches "**Plan D: Title**" and "Plan D: Title" without # prefix.
+pub fn parse_plan_options_relaxed(text: &str) -> Vec<(String, String, String)> {
+    parse_plan_options_inner(text, false)
+}
+
+fn parse_plan_options_inner(text: &str, strict: bool) -> Vec<(String, String, String)> {
     let mut options = Vec::new();
     let mut current_label: Option<String> = None;
     let mut current_title: Option<String> = None;
@@ -145,7 +154,7 @@ pub fn parse_plan_options(text: &str) -> Vec<(String, String, String)> {
 
     for line in text.lines() {
         // Check if this is a plan header
-        if let Some(plan_info) = extract_plan_header(line) {
+        if let Some(plan_info) = extract_plan_header(line, strict) {
             // Save previous option
             if let (Some(label), Some(title)) = (current_label.take(), current_title.take()) {
                 let content = current_content.trim().to_string();
@@ -202,16 +211,27 @@ fn is_non_plan_heading(line: &str) -> bool {
     STOP_HEADINGS.iter().any(|s| heading_text.starts_with(s))
 }
 
-fn extract_plan_header(line: &str) -> Option<(String, String)> {
+fn extract_plan_header(line: &str, strict: bool) -> Option<(String, String)> {
     let trimmed = line.trim();
 
-    // Must be a heading line (starts with #) -- this prevents matching
-    // "Plan A" references inside paragraph text
-    if !trimmed.starts_with('#') {
-        return None;
+    if strict {
+        // Strict mode: must be a heading line (starts with #)
+        if !trimmed.starts_with('#') {
+            return None;
+        }
+    } else {
+        // Relaxed mode: must start with #, **, or "Plan " directly at line start
+        if !trimmed.starts_with('#') && !trimmed.starts_with("**Plan ") && !trimmed.starts_with("Plan ") {
+            return None;
+        }
     }
 
-    let stripped = trimmed.trim_start_matches('#').trim();
+    let stripped = trimmed
+        .trim_start_matches('#')
+        .trim()
+        .trim_start_matches("**")
+        .trim_end_matches("**")
+        .trim();
 
     // Match "Plan X: Title" or "Plan X - Title" where X is A-Z
     if !stripped.starts_with("Plan ") {
