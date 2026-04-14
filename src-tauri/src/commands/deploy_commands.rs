@@ -113,7 +113,7 @@ CRITICAL -- Application Provisioning:
   6. Configure a reverse proxy (Caddy preferred -- auto-HTTPS, simpler than Nginx) on port 80/443
   7. The app should be accessible via HTTP immediately after provisioning
 - The user_data script should be a complete bash script, not a skeleton
-- Use $${variable} syntax (double dollar) for bash variables inside heredoc to avoid Terraform interpolation conflicts
+- Use double-dollar ($$) for bash variables inside heredoc to avoid Terraform interpolation conflicts
 
 {domain_instructions}
 
