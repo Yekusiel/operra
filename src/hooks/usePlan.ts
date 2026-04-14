@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as api from "../lib/tauri";
 
@@ -34,4 +35,32 @@ export function useGeneratePlan(projectId: string) {
       qc.invalidateQueries({ queryKey: ["plans", projectId] });
     },
   });
+}
+
+export function usePlanMessages(planId: string) {
+  return useQuery({
+    queryKey: ["planMessages", planId],
+    queryFn: () => api.getPlanMessages(planId),
+    enabled: !!planId,
+  });
+}
+
+export function useSendPlanMessage(planId: string) {
+  const qc = useQueryClient();
+  const [isStreaming, setIsStreaming] = useState(false);
+
+  const mutation = useMutation({
+    mutationFn: (message: string) => {
+      setIsStreaming(true);
+      return api.sendPlanMessage(planId, message);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["planMessages", planId] });
+    },
+    onSettled: () => {
+      setIsStreaming(false);
+    },
+  });
+
+  return { ...mutation, isStreaming };
 }

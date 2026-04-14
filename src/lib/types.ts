@@ -265,6 +265,16 @@ export interface PlanGenerationResult {
   adapter_log_id: string;
 }
 
+// ── Plan Messages ──
+
+export interface PlanMessage {
+  id: string;
+  plan_id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+}
+
 // ── Constants ──
 
 export const AWS_REGIONS = [

@@ -1,6 +1,7 @@
 use crate::db::AppDb;
 use crate::models::adapter_log::AdapterLog;
 use crate::models::plan::Plan;
+use crate::models::plan_message::PlanMessage;
 use crate::models::project::Project;
 use crate::models::questionnaire::QuestionnaireResponse;
 use crate::models::scan::{Scan, ScanFinding};
@@ -307,4 +308,97 @@ fn extract_section(text: &str, header: &str, end_markers: &[&str]) -> Option<Str
     } else {
         Some(section.to_string())
     }
+}
+
+// ── Plan Chat ──
+
+#[tauri::command]
+pub async fn send_plan_message(
+    state: tauri::State<'_, AppDb>,
+    plan_id: String,
+    message: String,
+) -> Result<PlanMessage, String> {
+    // Get plan and its conversation history
+    let (plan, history) = {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        let plan = Plan::get_by_id(&conn, &plan_id)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| format!("Plan not found: {}", plan_id))?;
+        let history = PlanMessage::list_for_plan(&conn, &plan_id)
+            .map_err(|e| e.to_string())?;
+        (plan, history)
+    };
+
+    // Save user message
+    {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        PlanMessage::create(&conn, &plan_id, "user", &message)
+            .map_err(|e| e.to_string())?;
+    }
+
+    // Build the conversation prompt
+    let prompt = build_chat_prompt(&plan, &history, &message);
+
+    // Invoke Claude
+    let adapter = ClaudeCliAdapter::default_path();
+    let start = Instant::now();
+
+    match adapter.invoke_plan(&prompt).await {
+        Ok(response) => {
+            let duration = start.elapsed().as_millis() as i64;
+            let conn = state.conn.lock().map_err(|e| e.to_string())?;
+
+            let assistant_msg = PlanMessage::create(&conn, &plan_id, "assistant", &response)
+                .map_err(|e| e.to_string())?;
+
+            // Log the interaction
+            let _ = AdapterLog::create(&conn, &plan.project_id, "claude-code", "plan_chat", &prompt)
+                .and_then(|log| AdapterLog::complete(&conn, &log.id, &response, None, duration));
+
+            Ok(assistant_msg)
+        }
+        Err(err) => {
+            // Remove the user message if Claude fails so it can be retried
+            let err_str = err.to_string();
+            Err(err_str)
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn get_plan_messages(
+    state: tauri::State<'_, AppDb>,
+    plan_id: String,
+) -> Result<Vec<PlanMessage>, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    PlanMessage::list_for_plan(&conn, &plan_id).map_err(|e| e.to_string())
+}
+
+fn build_chat_prompt(plan: &Plan, history: &[PlanMessage], new_message: &str) -> String {
+    let mut prompt = String::new();
+
+    prompt.push_str("You are an AWS infrastructure architect continuing a conversation about an infrastructure plan you previously generated.\n\n");
+
+    // Include the original plan as context
+    if let Some(ref md) = plan.plan_markdown {
+        prompt.push_str("## The Infrastructure Plan You Generated\n\n");
+        prompt.push_str(md);
+        prompt.push_str("\n\n");
+    }
+
+    // Include conversation history
+    if !history.is_empty() {
+        prompt.push_str("## Conversation So Far\n\n");
+        for msg in history {
+            let role_label = if msg.role == "user" { "User" } else { "You" };
+            prompt.push_str(&format!("**{}**: {}\n\n", role_label, msg.content));
+        }
+    }
+
+    // The new user message
+    prompt.push_str(&format!("## User's New Message\n\n{}\n\n", new_message));
+
+    prompt.push_str("Respond helpfully. If the user asks to change the plan, provide the updated sections. If they ask questions, answer clearly with specifics. Keep using markdown formatting.\n");
+
+    prompt
 }

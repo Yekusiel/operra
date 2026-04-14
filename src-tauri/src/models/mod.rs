@@ -1,5 +1,6 @@
 pub mod adapter_log;
 pub mod plan;
+pub mod plan_message;
 pub mod project;
 pub mod questionnaire;
 pub mod scan;

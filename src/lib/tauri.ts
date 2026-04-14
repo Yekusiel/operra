@@ -10,6 +10,7 @@ import type {
   AutoFilledAnswers,
   Plan,
   PlanGenerationResult,
+  PlanMessage,
 } from "./types";
 
 // ── Projects ──
@@ -78,3 +79,11 @@ export const getLatestPlan = (projectId: string) =>
 
 export const listPlans = (projectId: string) =>
   invoke<Plan[]>("list_plans", { projectId });
+
+// ── Plan Chat ──
+
+export const sendPlanMessage = (planId: string, message: string) =>
+  invoke<PlanMessage>("send_plan_message", { planId, message });
+
+export const getPlanMessages = (planId: string) =>
+  invoke<PlanMessage[]>("get_plan_messages", { planId });

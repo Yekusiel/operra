@@ -101,6 +101,21 @@ const MIGRATIONS: &[Migration] = &[
             CREATE INDEX idx_adapter_logs_project_id ON adapter_logs(project_id);
         ",
     },
+    Migration {
+        version: 3,
+        name: "plan_messages",
+        sql: "
+            CREATE TABLE plan_messages (
+                id          TEXT PRIMARY KEY,
+                plan_id     TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+                role        TEXT NOT NULL,
+                content     TEXT NOT NULL,
+                created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+            );
+
+            CREATE INDEX idx_plan_messages_plan_id ON plan_messages(plan_id);
+        ",
+    },
 ];
 
 pub fn run_all(conn: &Connection) -> Result<(), rusqlite::Error> {

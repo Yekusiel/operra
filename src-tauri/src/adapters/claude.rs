@@ -1,6 +1,7 @@
 use super::{AdapterMessage, AdapterResponse, ReasoningAdapter};
 use async_trait::async_trait;
 use std::process::Stdio;
+use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
 pub struct ClaudeCliAdapter {
@@ -13,8 +14,6 @@ impl ClaudeCliAdapter {
     }
 
     pub fn default_path() -> Self {
-        // On Windows, npm global installs create .cmd shims.
-        // Resolve the full path from APPDATA to bypass PATH issues.
         if cfg!(windows) {
             if let Some(full_path) = Self::resolve_npm_global("claude.cmd") {
                 return Self { cli_path: full_path };
@@ -26,7 +25,6 @@ impl ClaudeCliAdapter {
     }
 
     fn resolve_npm_global(cmd: &str) -> Option<String> {
-        // Check APPDATA/npm which is the standard npm global bin on Windows
         if let Ok(appdata) = std::env::var("APPDATA") {
             let path = std::path::PathBuf::from(&appdata).join("npm").join(cmd);
             if path.exists() {
@@ -36,11 +34,8 @@ impl ClaudeCliAdapter {
         None
     }
 
-    /// Invoke Claude Code for plan generation specifically.
-    /// Uses --print for non-interactive output.
     fn build_command(&self, args: &[&str]) -> Command {
         if cfg!(windows) {
-            // On Windows, run through cmd.exe so .cmd shims are resolved properly
             let mut cmd = Command::new("cmd");
             cmd.arg("/C").arg(&self.cli_path);
             for arg in args {
@@ -60,14 +55,14 @@ impl ClaudeCliAdapter {
         &self,
         prompt: &str,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        let mut cmd = self.build_command(&["--print", "--output-format", "text"]);
-        let output = cmd
-            .arg(prompt)
-            .stdin(Stdio::null())
+        // Pipe prompt via stdin instead of CLI arg to avoid Windows
+        // command-line length limits (8191 chars) truncating the context.
+        let mut cmd = self.build_command(&["--print", "--output-format", "text", "-p"]);
+        let mut child = cmd
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .output()
-            .await
+            .spawn()
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::NotFound {
                     format!(
@@ -78,6 +73,16 @@ impl ClaudeCliAdapter {
                     format!("Failed to run Claude Code CLI: {}", e)
                 }
             })?;
+
+        // Write the full prompt to stdin
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(prompt.as_bytes()).await
+                .map_err(|e| format!("Failed to write prompt to Claude stdin: {}", e))?;
+            // Drop stdin to close it and signal EOF
+        }
+
+        let output = child.wait_with_output().await
+            .map_err(|e| format!("Failed to wait for Claude CLI: {}", e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
