@@ -683,16 +683,16 @@ export function ProjectDetailPage() {
                         CI/CD Setup (one-time)
                       </h4>
                       <p className="text-[10px] text-purple-700 mb-3">
-                        Add these secrets to your GitHub repo so every push to <span className="font-mono font-semibold">{cicdSecrets.branch}</span> auto-deploys.
+                        Add these as <span className="font-semibold">Repository secrets</span> (not Environment secrets) so every push to <span className="font-mono font-semibold">{cicdSecrets.branch}</span> auto-deploys.
                       </p>
 
                       <a
-                        href={cicdSecrets.secrets_url}
+                        href={cicdSecrets.secrets_url + "/new"}
                         target="_blank"
                         rel="noreferrer"
                         className="text-xs text-purple-700 underline hover:text-purple-900 block mb-3"
                       >
-                        Open GitHub Secrets settings
+                        Add a new repository secret on GitHub
                       </a>
 
                       <div className="space-y-2">
