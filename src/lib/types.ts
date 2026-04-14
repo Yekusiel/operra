@@ -267,6 +267,21 @@ export interface PlanGenerationResult {
   adapter_log_id: string;
 }
 
+// ── Plan Options ──
+
+export interface PlanOption {
+  id: string;
+  plan_id: string;
+  label: string;
+  title: string;
+  content: string;
+  source: "generation" | "chat";
+  source_message_id: string | null;
+  approved: boolean;
+  approved_at: string | null;
+  created_at: string;
+}
+
 // ── Plan Messages ──
 
 export interface PlanMessage {

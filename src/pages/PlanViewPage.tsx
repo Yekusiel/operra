@@ -2,21 +2,24 @@ import { useState, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
-  FileText,
   AlertTriangle,
-  DollarSign,
-  Lightbulb,
   Clock,
   Send,
   Loader2,
   User,
   Bot,
   CheckCircle2,
-  ShieldCheck,
+  Shield,
 } from "lucide-react";
 import { TopBar } from "../components/layout/TopBar";
 import { useProject } from "../hooks/useProjects";
-import { usePlan, usePlanMessages, useSendPlanMessage, useApprovePlan } from "../hooks/usePlan";
+import {
+  usePlan,
+  usePlanMessages,
+  useSendPlanMessage,
+  usePlanOptions,
+  useApprovePlanOption,
+} from "../hooks/usePlan";
 
 export function PlanViewPage() {
   const { projectId, planId } = useParams<{
@@ -26,15 +29,14 @@ export function PlanViewPage() {
   const navigate = useNavigate();
   const { data: project } = useProject(projectId!);
   const { data: plan, isLoading, error } = usePlan(planId!);
+  const { data: options } = usePlanOptions(planId!);
   const { data: messages } = usePlanMessages(planId!);
   const sendMessage = useSendPlanMessage(planId!);
-  const approvePlan = useApprovePlan();
+  const approveOption = useApprovePlanOption(planId!);
 
   const [input, setInput] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Scroll to bottom when new messages arrive
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sendMessage.isStreaming]);
@@ -64,7 +66,7 @@ export function PlanViewPage() {
   if (error || !plan) {
     return (
       <>
-        <TopBar title="Infrastructure Plan" />
+        <TopBar title="Infrastructure Planning" />
         <div className="p-6">
           <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             {error ? String(error) : "Plan not found."}
@@ -74,10 +76,13 @@ export function PlanViewPage() {
     );
   }
 
+  const hasApprovedOption = options?.some((o) => o.approved);
+  const hasOptions = options && options.length > 0;
+
   return (
     <>
       <TopBar
-        title="Infrastructure Plan"
+        title="Infrastructure Planning"
         subtitle={project?.name}
         actions={
           <button
@@ -91,69 +96,22 @@ export function PlanViewPage() {
       />
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Scrollable content area */}
         <div className="flex-1 overflow-y-auto p-6">
           <div className="mx-auto max-w-4xl space-y-6">
-            {/* Approval banner */}
-            {plan.status === "completed" && !plan.approved && (
-              <div className="rounded-xl border-2 border-brand-300 bg-brand-50 p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3">
-                    <ShieldCheck className="h-6 w-6 text-brand-600 mt-0.5" />
-                    <div>
-                      <h3 className="text-sm font-semibold text-brand-900">
-                        Review and approve this plan
-                      </h3>
-                      <p className="text-sm text-brand-700 mt-1">
-                        Read through the plan below. Use the chat to ask questions or request changes.
-                        When you're satisfied, approve it to proceed to infrastructure code generation.
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    className="btn-primary shrink-0"
-                    onClick={() => approvePlan.mutate(planId!)}
-                    disabled={approvePlan.isPending}
-                  >
-                    {approvePlan.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <CheckCircle2 className="h-4 w-4" />
-                    )}
-                    Approve Plan
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {plan.approved && (
-              <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
-                <CheckCircle2 className="h-5 w-5 text-green-600" />
-                <div>
-                  <p className="text-sm font-medium text-green-800">Plan Approved</p>
-                  <p className="text-xs text-green-700">
-                    Approved {plan.approved_at ? new Date(plan.approved_at).toLocaleString() : ""} — ready for code generation
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Status badge */}
+            {/* Status */}
             <div className="flex items-center gap-4">
               <span
                 className={
-                  plan.approved
+                  hasApprovedOption
                     ? "badge-green"
                     : plan.status === "completed"
                       ? "badge-yellow"
                       : plan.status === "failed"
                         ? "badge-red"
-                        : plan.status === "generating"
-                          ? "badge-blue"
-                          : "badge-gray"
+                        : "badge-blue"
                 }
               >
-                {plan.approved ? "approved" : plan.status}
+                {hasApprovedOption ? "plan approved" : plan.status}
               </span>
               <span className="flex items-center gap-1 text-xs text-gray-500">
                 <Clock className="h-3.5 w-3.5" />
@@ -177,47 +135,101 @@ export function PlanViewPage() {
               </div>
             )}
 
-            {/* Main plan content */}
-            {plan.plan_markdown && (
-              <div className="card">
-                <div className="flex items-center gap-2 mb-4">
-                  <FileText className="h-5 w-5 text-brand-600" />
-                  <h2 className="text-base font-semibold text-gray-900">
-                    Recommended Architecture
-                  </h2>
+            {/* Instruction banner when no option approved yet */}
+            {plan.status === "completed" && !hasApprovedOption && hasOptions && (
+              <div className="rounded-xl border-2 border-brand-200 bg-brand-50 p-4">
+                <div className="flex items-start gap-3">
+                  <Shield className="h-5 w-5 text-brand-600 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-brand-900">
+                      Choose a plan to approve
+                    </p>
+                    <p className="text-sm text-brand-700 mt-0.5">
+                      Review the options below, use the chat to ask questions or
+                      request changes, then approve the plan you want to build.
+                    </p>
+                  </div>
                 </div>
+              </div>
+            )}
+
+            {/* Plan Option Cards */}
+            {hasOptions &&
+              options.map((option) => (
+                <div
+                  key={option.id}
+                  className={`card relative ${
+                    option.approved
+                      ? "border-2 border-green-400 bg-green-50/30"
+                      : "hover:border-gray-300"
+                  }`}
+                >
+                  {/* Header */}
+                  <div className="flex items-start justify-between gap-4 mb-4">
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ${
+                          option.approved
+                            ? "bg-green-600 text-white"
+                            : "bg-brand-100 text-brand-700"
+                        }`}
+                      >
+                        {option.label}
+                      </span>
+                      <div>
+                        <h3 className="text-base font-semibold text-gray-900">
+                          {option.title}
+                        </h3>
+                        {option.source === "chat" && (
+                          <span className="text-[10px] text-gray-400 uppercase tracking-wider">
+                            Added from conversation
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {option.approved ? (
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        <div className="text-right">
+                          <p className="text-xs font-semibold text-green-800">
+                            Approved
+                          </p>
+                          <p className="text-[10px] text-green-600">
+                            {option.approved_at
+                              ? new Date(option.approved_at).toLocaleString()
+                              : ""}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        className="btn-primary shrink-0"
+                        onClick={() => approveOption.mutate(option.id)}
+                        disabled={approveOption.isPending}
+                      >
+                        {approveOption.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="h-4 w-4" />
+                        )}
+                        Approve Plan {option.label}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Content */}
+                  <div className="prose prose-sm max-w-none">
+                    <MarkdownRenderer content={option.content} />
+                  </div>
+                </div>
+              ))}
+
+            {/* Fallback: show raw plan if no options were parsed */}
+            {!hasOptions && plan.plan_markdown && (
+              <div className="card">
                 <div className="prose prose-sm max-w-none">
                   <MarkdownRenderer content={plan.plan_markdown} />
-                </div>
-              </div>
-            )}
-
-            {/* Alternatives */}
-            {plan.alternatives && (
-              <div className="card border-purple-200 bg-purple-50/30">
-                <div className="flex items-center gap-2 mb-3">
-                  <Lightbulb className="h-5 w-5 text-purple-600" />
-                  <h3 className="text-sm font-semibold text-purple-900">
-                    Alternatives
-                  </h3>
-                </div>
-                <div className="prose prose-sm max-w-none text-purple-900">
-                  <MarkdownRenderer content={plan.alternatives} />
-                </div>
-              </div>
-            )}
-
-            {/* Cost notes */}
-            {plan.cost_notes && (
-              <div className="card border-green-200 bg-green-50/30">
-                <div className="flex items-center gap-2 mb-3">
-                  <DollarSign className="h-5 w-5 text-green-600" />
-                  <h3 className="text-sm font-semibold text-green-900">
-                    Cost Notes
-                  </h3>
-                </div>
-                <div className="prose prose-sm max-w-none text-green-900">
-                  <MarkdownRenderer content={plan.cost_notes} />
                 </div>
               </div>
             )}
@@ -281,7 +293,6 @@ export function PlanViewPage() {
               </div>
             )}
 
-            {/* Streaming indicator */}
             {sendMessage.isPending && (
               <div className="flex gap-3">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100">
@@ -304,17 +315,16 @@ export function PlanViewPage() {
           </div>
         </div>
 
-        {/* Fixed chat input bar */}
+        {/* Chat input */}
         {plan.status === "completed" && (
           <div className="border-t border-gray-200 bg-white px-6 py-4">
             <div className="mx-auto max-w-4xl">
               <div className="flex items-end gap-3">
                 <textarea
-                  ref={inputRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Ask about the plan, request changes, or explore alternatives..."
+                  placeholder="Ask about the plans, request changes, or suggest a new approach..."
                   className="input min-h-[44px] max-h-[120px] resize-none flex-1"
                   rows={1}
                   disabled={sendMessage.isPending}
@@ -332,7 +342,7 @@ export function PlanViewPage() {
                 </button>
               </div>
               <p className="text-[10px] text-gray-400 mt-1.5">
-                Press Enter to send, Shift+Enter for new line
+                Press Enter to send, Shift+Enter for new line. New plans mentioned in chat will appear as options above.
               </p>
             </div>
           </div>

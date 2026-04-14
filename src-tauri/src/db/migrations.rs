@@ -177,6 +177,26 @@ const MIGRATIONS: &[Migration] = &[
             ALTER TABLE plans ADD COLUMN approved_at TEXT;
         ",
     },
+    Migration {
+        version: 6,
+        name: "plan_options",
+        sql: "
+            CREATE TABLE plan_options (
+                id              TEXT PRIMARY KEY,
+                plan_id         TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+                label           TEXT NOT NULL,
+                title           TEXT NOT NULL,
+                content         TEXT NOT NULL,
+                source          TEXT NOT NULL DEFAULT 'generation',
+                source_message_id TEXT,
+                approved        INTEGER NOT NULL DEFAULT 0,
+                approved_at     TEXT,
+                created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+            );
+
+            CREATE INDEX idx_plan_options_plan_id ON plan_options(plan_id);
+        ",
+    },
 ];
 
 pub fn run_all(conn: &Connection) -> Result<(), rusqlite::Error> {

@@ -2,6 +2,7 @@ use crate::db::AppDb;
 use crate::models::adapter_log::AdapterLog;
 use crate::models::plan::Plan;
 use crate::models::plan_message::PlanMessage;
+use crate::models::plan_option::{self, PlanOption};
 use crate::models::project::Project;
 use crate::models::questionnaire::QuestionnaireResponse;
 use crate::models::scan::{Scan, ScanFinding};
@@ -76,18 +77,25 @@ pub async fn generate_plan(
             let duration = start.elapsed().as_millis() as i64;
             let conn = state.conn.lock().map_err(|e| e.to_string())?;
 
-            // Parse structured sections from response
-            let (markdown, alternatives, cost_notes) = parse_plan_response(&response);
-
+            // Store full response as plan markdown
             Plan::complete(
                 &conn,
                 &plan.id,
-                &markdown,
+                &response,
                 None,
-                alternatives.as_deref(),
-                cost_notes.as_deref(),
+                None,
+                None,
             )
             .map_err(|e| e.to_string())?;
+
+            // Parse and store individual plan options (Plan A, Plan B, etc.)
+            let parsed_options = plan_option::parse_plan_options(&response);
+            for (label, title, content) in &parsed_options {
+                PlanOption::create(
+                    &conn, &plan.id, label, title, content, "generation", None,
+                )
+                .map_err(|e| e.to_string())?;
+            }
 
             AdapterLog::complete(&conn, &log_id, &response, None, duration)
                 .map_err(|e| e.to_string())?;
@@ -160,6 +168,44 @@ pub async fn get_approved_plan(
 ) -> Result<Option<Plan>, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     Plan::get_approved_for_project(&conn, &project_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_plan_options(
+    state: tauri::State<'_, AppDb>,
+    plan_id: String,
+) -> Result<Vec<PlanOption>, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    PlanOption::list_for_plan(&conn, &plan_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn approve_plan_option(
+    state: tauri::State<'_, AppDb>,
+    option_id: String,
+) -> Result<PlanOption, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    PlanOption::approve(&conn, &option_id).map_err(|e| e.to_string())?;
+    PlanOption::get_approved(&conn, {
+        // Get plan_id from the option
+        let opts = conn.query_row(
+            "SELECT plan_id FROM plan_options WHERE id = ?1",
+            rusqlite::params![option_id],
+            |row| row.get::<_, String>(0),
+        ).map_err(|e| e.to_string())?;
+        &opts
+    }.as_str())
+    .map_err(|e| e.to_string())?
+    .ok_or("Option not found after approval".to_string())
+}
+
+#[tauri::command]
+pub async fn get_approved_option(
+    state: tauri::State<'_, AppDb>,
+    plan_id: String,
+) -> Result<Option<PlanOption>, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    PlanOption::get_approved(&conn, &plan_id).map_err(|e| e.to_string())
 }
 
 fn build_plan_prompt(
@@ -265,36 +311,32 @@ fn build_plan_prompt(
     // Instructions for output format
     prompt.push_str(r#"## Instructions
 
-Generate a complete AWS infrastructure plan. Structure your response with these exact sections:
+Generate 2-3 infrastructure plan options for this project. The user will choose which one to approve.
 
-### Recommended Architecture
-Describe the proposed AWS architecture in detail. Include specific AWS services, how they connect, and why each was chosen.
+IMPORTANT: Structure each plan as a separate section using this exact format:
 
-### Why This Architecture
-Explain the reasoning behind the choices. Reference the detected technologies and user requirements.
+## Plan A: [Short descriptive title]
+[Full description of this architecture option including:]
+- AWS services used and how they connect
+- Why this approach fits the project
+- Estimated monthly cost range
+- Deployment complexity: LOW, MEDIUM, or HIGH
+- Key tradeoffs
 
-### Alternatives
-List 2-3 alternative approaches with brief tradeoffs. Format each as:
-- **Alternative Name**: Description. *Tradeoff: explanation*
+## Plan B: [Short descriptive title]
+[Same structure as above for the alternative approach]
 
-### Cost Notes
-Provide rough cost-aware notes. Include:
-- Estimated monthly cost range for the recommended architecture
-- Which services are the main cost drivers
-- Cost optimization tips specific to this setup
+## Plan C: [Short descriptive title]
+[Optional third option if meaningfully different]
 
-### Deployment Prerequisites
-List what needs to be in place before deployment:
-- AWS account setup requirements
-- IAM roles/policies needed
-- DNS/domain requirements
-- SSL certificate needs
-- Any manual steps required
-
-### Risk Assessment
-Rate the deployment complexity as LOW, MEDIUM, or HIGH and explain why.
-
-Use clear, practical language. This plan will be shown to a developer who needs to understand exactly what will be deployed and why.
+Guidelines:
+- Plan A should be the recommended/best-fit option
+- Plan B should be a meaningfully different alternative (e.g., cheaper but with tradeoffs, or more scalable)
+- Plan C is optional, only include if there's a genuinely different third approach
+- Each plan must be self-contained with enough detail to implement
+- Include cost estimates for each plan
+- Be specific about AWS services, not vague
+- Use clear, practical language
 "#);
 
     prompt
@@ -372,6 +414,21 @@ pub async fn send_plan_message(
             let assistant_msg = PlanMessage::create(&conn, &plan_id, "assistant", &response)
                 .map_err(|e| e.to_string())?;
 
+            // Check if the response contains new plan options
+            let new_options = plan_option::parse_plan_options(&response);
+            if !new_options.is_empty() {
+                for (label, title, content) in &new_options {
+                    // Use next available label to avoid duplicates
+                    let actual_label = PlanOption::next_label(&conn, &plan_id)
+                        .map_err(|e| e.to_string())?;
+                    PlanOption::create(
+                        &conn, &plan_id, &actual_label, title, content,
+                        "chat", Some(&assistant_msg.id),
+                    )
+                    .map_err(|e| e.to_string())?;
+                }
+            }
+
             // Log the interaction
             let _ = AdapterLog::create(&conn, &plan.project_id, "claude-code", "plan_chat", &prompt)
                 .and_then(|log| AdapterLog::complete(&conn, &log.id, &response, None, duration));
@@ -379,7 +436,6 @@ pub async fn send_plan_message(
             Ok(assistant_msg)
         }
         Err(err) => {
-            // Remove the user message if Claude fails so it can be retried
             let err_str = err.to_string();
             Err(err_str)
         }
@@ -419,7 +475,15 @@ fn build_chat_prompt(plan: &Plan, history: &[PlanMessage], new_message: &str) ->
     // The new user message
     prompt.push_str(&format!("## User's New Message\n\n{}\n\n", new_message));
 
-    prompt.push_str("Respond helpfully. If the user asks to change the plan, provide the updated sections. If they ask questions, answer clearly with specifics. Keep using markdown formatting.\n");
+    prompt.push_str(r#"Respond helpfully. If the user asks to change a plan or suggests a new approach, present it as a new plan option using the format:
+
+## Plan [next letter]: [Title]
+[Full description]
+
+This will automatically be detected and shown as a new approvable option in the UI.
+
+If the user asks questions or wants clarification, answer clearly without creating a new plan option. Keep using markdown formatting.
+"#);
 
     prompt
 }

@@ -1,6 +1,7 @@
 use crate::db::AppDb;
 use crate::models::deployment::Deployment;
 use crate::models::plan::Plan;
+use crate::models::plan_option::PlanOption;
 use crate::adapters::claude::ClaudeCliAdapter;
 use crate::tools::tofu;
 use std::path::{Path, PathBuf};
@@ -17,18 +18,31 @@ pub async fn generate_iac(
     project_id: String,
     plan_id: String,
 ) -> Result<IacGenerationResult, String> {
-    let (plan, project) = {
+    let (plan, approved_option, project) = {
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
         let plan = Plan::get_by_id(&conn, &plan_id)
             .map_err(|e| e.to_string())?
             .ok_or("Plan not found")?;
+
+        if !plan.approved {
+            return Err("No plan has been approved. Review and approve a plan option first.".to_string());
+        }
+
+        let approved_option = PlanOption::get_approved(&conn, &plan_id)
+            .map_err(|e| e.to_string())?;
+
         let project = crate::models::project::Project::get_by_id(&conn, &project_id)
             .map_err(|e| e.to_string())?
             .ok_or("Project not found")?;
-        (plan, project)
+        (plan, approved_option, project)
     };
 
-    let plan_markdown = plan.plan_markdown.as_deref().ok_or("Plan has no content")?;
+    // Use the approved option's content if available, otherwise fall back to full plan
+    let plan_markdown = if let Some(ref opt) = approved_option {
+        opt.content.as_str()
+    } else {
+        plan.plan_markdown.as_deref().ok_or("Plan has no content")?
+    };
 
     // Build prompt asking Claude to generate OpenTofu files
     let prompt = format!(

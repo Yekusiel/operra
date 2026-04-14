@@ -540,31 +540,50 @@ export function ProjectDetailPage() {
           </div>
         )}
 
-        {/* Latest Plan Quick View */}
+        {/* Architecture Planning Session */}
         {latestPlan && latestPlan.status === "completed" && (
-          <div className="card border-brand-200 bg-brand-50/30">
+          <div className={`card ${latestPlan.approved ? "border-green-200 bg-green-50/30" : "border-brand-200 bg-brand-50/30"}`}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-brand-600" />
-                <h3 className="text-sm font-semibold text-brand-900">
-                  Latest Infrastructure Plan
+                <FileText className={`h-5 w-5 ${latestPlan.approved ? "text-green-600" : "text-brand-600"}`} />
+                <h3 className={`text-sm font-semibold ${latestPlan.approved ? "text-green-900" : "text-brand-900"}`}>
+                  Architecture Planning
                 </h3>
+                <span className={latestPlan.approved ? "badge-green" : "badge-yellow"}>
+                  {latestPlan.approved ? "Approved" : "Awaiting Review"}
+                </span>
               </div>
-              <Link
-                to={`/projects/${project.id}/plans/${latestPlan.id}`}
-                className="btn-primary text-xs px-3 py-1.5"
-              >
-                View Full Plan
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link
+                  to={`/projects/${project.id}/plans/${latestPlan.id}`}
+                  className="btn-primary text-xs px-3 py-1.5 no-underline"
+                >
+                  {latestPlan.approved ? "View Plans" : "Review & Approve"}
+                </Link>
+                <button
+                  className="btn-secondary text-xs px-3 py-1.5"
+                  onClick={() => {
+                    if (window.confirm("Regenerate the plan? This will start a new planning session.")) {
+                      generatePlan.mutate(undefined, {
+                        onSuccess: (result) => {
+                          navigate(`/projects/${project.id}/plans/${result.plan.id}`);
+                        },
+                      });
+                    }
+                  }}
+                  disabled={generatePlan.isPending}
+                >
+                  {generatePlan.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    "Regenerate"
+                  )}
+                </button>
+              </div>
             </div>
-            <p className="text-xs text-brand-700">
+            <p className={`text-xs ${latestPlan.approved ? "text-green-700" : "text-brand-700"}`}>
               Generated {new Date(latestPlan.created_at).toLocaleString()}
             </p>
-            {latestPlan.plan_markdown && (
-              <p className="text-sm text-brand-800 mt-2 line-clamp-3">
-                {latestPlan.plan_markdown.slice(0, 300)}...
-              </p>
-            )}
           </div>
         )}
 

@@ -10,6 +10,7 @@ import type {
   AutoFilledAnswers,
   Plan,
   PlanGenerationResult,
+  PlanOption,
   PlanMessage,
   DependencyReport,
   AwsConnection,
@@ -89,6 +90,15 @@ export const approvePlan = (planId: string) =>
 
 export const getApprovedPlan = (projectId: string) =>
   invoke<Plan | null>("get_approved_plan", { projectId });
+
+export const listPlanOptions = (planId: string) =>
+  invoke<PlanOption[]>("list_plan_options", { planId });
+
+export const approvePlanOption = (optionId: string) =>
+  invoke<PlanOption>("approve_plan_option", { optionId });
+
+export const getApprovedOption = (planId: string) =>
+  invoke<PlanOption | null>("get_approved_option", { planId });
 
 // ── Plan Chat ──
 
