@@ -91,6 +91,9 @@ Rules:
 - Include proper tagging (Project, ManagedBy=Operra)
 - Use variables for anything that should be configurable
 - EVERY variable MUST have a default value in variables.tf OR a value in terraform.tfvars
+- Do NOT use placeholder values like "CHANGEME" or "your-key-here" -- use real working defaults or omit the resource
+- For SSH key pairs: let AWS generate the key pair (omit public_key field) rather than requiring user to paste one
+- For passwords: use random_password resource from the random provider instead of hardcoded values
 - Include outputs for important values (endpoints, ARNs, etc.)
 - Add comments explaining non-obvious choices
 - Do NOT include any markdown formatting, explanations, or text outside the === FILE: === blocks
@@ -182,6 +185,56 @@ fn write_iac_file(output_dir: &Path, filename: &str, content: &str) -> Result<()
 
 // ── Deployment Commands ──
 
+const PLACEHOLDER_PATTERNS: &[&str] = &[
+    "CHANGEME",
+    "changeme",
+    "CHANGE_ME",
+    "change_me",
+    "your-",
+    "YOUR_",
+    "REPLACE",
+    "replace_me",
+    "TODO",
+    "xxx",
+    "FIXME",
+    "placeholder",
+    "example.com",
+];
+
+fn check_for_placeholders(infra_dir: &Path) -> Result<(), String> {
+    let tfvars_path = infra_dir.join("terraform.tfvars");
+    if !tfvars_path.exists() {
+        return Ok(());
+    }
+
+    let content = std::fs::read_to_string(&tfvars_path)
+        .map_err(|e| format!("Failed to read terraform.tfvars: {}", e))?;
+
+    let mut issues = Vec::new();
+    for (line_num, line) in content.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        for pattern in PLACEHOLDER_PATTERNS {
+            if trimmed.contains(pattern) {
+                issues.push(format!("  Line {}: {}", line_num + 1, trimmed));
+                break;
+            }
+        }
+    }
+
+    if !issues.is_empty() {
+        return Err(format!(
+            "terraform.tfvars contains placeholder values that need to be replaced before deploying:\n\n{}\n\nEdit the file at:\n{}",
+            issues.join("\n"),
+            tfvars_path.display(),
+        ));
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn run_tofu_plan(
     state: tauri::State<'_, AppDb>,
@@ -198,6 +251,9 @@ pub async fn run_tofu_plan(
     if !infra_dir.exists() {
         return Err("No infrastructure directory found. Generate IaC first.".to_string());
     }
+
+    // Check for placeholder values before running anything
+    check_for_placeholders(&infra_dir)?;
 
     // Create deployment record
     let deployment = {
