@@ -99,7 +99,10 @@ async fn find_tool_path(cmd: &str) -> Option<String> {
 pub async fn check_aws_cli() -> ToolStatus {
     check_tool(
         "AWS CLI",
-        &["aws"],
+        &[
+            "aws",
+            "C:\\Program Files\\Amazon\\AWSCLIV2\\aws.exe",
+        ],
         &["--version"],
         if cfg!(windows) {
             "Install with: winget install Amazon.AWSCLI\nThen restart your terminal and run: aws configure"
@@ -117,7 +120,7 @@ pub async fn check_tofu() -> ToolStatus {
         &["tofu"],
         &["--version"],
         if cfg!(windows) {
-            "Install with: winget install OpenTofu.OpenTofu\nThen restart your terminal."
+            "Install with: winget install --exact --id=OpenTofu.Tofu\nThen restart your terminal."
         } else {
             "Install from https://opentofu.org/docs/intro/install/\nOr via brew: brew install opentofu"
         },
@@ -132,7 +135,7 @@ pub async fn check_claude_cli() -> ToolStatus {
     } else {
         vec!["claude"]
     };
-    let cmds: Vec<&str> = commands.iter().map(|s| s.as_str()).collect();
+    let cmds: Vec<&str> = commands.iter().map(|s| s.as_ref()).collect();
 
     check_tool(
         "Claude Code",

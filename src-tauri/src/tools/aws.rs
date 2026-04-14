@@ -19,10 +19,39 @@ pub struct AwsConnectionResult {
     pub error: Option<String>,
 }
 
+fn resolve_aws_path() -> String {
+    if cfg!(windows) {
+        // AWS CLI v2 installs to Program Files but often isn't in PATH
+        let candidates = [
+            "aws",
+            "C:\\Program Files\\Amazon\\AWSCLIV2\\aws.exe",
+            "C:\\Program Files (x86)\\Amazon\\AWSCLIV2\\aws.exe",
+        ];
+        for candidate in &candidates {
+            let path = std::path::Path::new(candidate);
+            if candidate.contains('\\') && path.exists() {
+                return candidate.to_string();
+            }
+        }
+        // Also check LOCALAPPDATA
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            let p = std::path::PathBuf::from(&local).join("Programs\\Amazon\\AWSCLIV2\\aws.exe");
+            if p.exists() {
+                return p.to_string_lossy().to_string();
+            }
+        }
+        "aws".to_string()
+    } else {
+        "aws".to_string()
+    }
+}
+
 fn build_aws_command(args: &[&str], profile: Option<&str>, region: Option<&str>) -> Command {
+    let aws_path = resolve_aws_path();
+
     if cfg!(windows) {
         let mut cmd = Command::new("cmd");
-        cmd.arg("/C").arg("aws");
+        cmd.arg("/C").arg(&aws_path);
         for arg in args {
             cmd.arg(arg);
         }
@@ -34,7 +63,7 @@ fn build_aws_command(args: &[&str], profile: Option<&str>, region: Option<&str>)
         }
         cmd
     } else {
-        let mut cmd = Command::new("aws");
+        let mut cmd = Command::new(&aws_path);
         for arg in args {
             cmd.arg(arg);
         }
