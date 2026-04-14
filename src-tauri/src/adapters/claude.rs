@@ -14,23 +14,54 @@ impl ClaudeCliAdapter {
 
     pub fn default_path() -> Self {
         // On Windows, npm global installs create .cmd shims.
-        // Rust's Command::new needs the .cmd extension to find them.
-        let cli_path = if cfg!(windows) {
-            "claude.cmd".to_string()
+        // Resolve the full path from APPDATA to bypass PATH issues.
+        if cfg!(windows) {
+            if let Some(full_path) = Self::resolve_npm_global("claude.cmd") {
+                return Self { cli_path: full_path };
+            }
+            Self { cli_path: "claude.cmd".to_string() }
         } else {
-            "claude".to_string()
-        };
-        Self { cli_path }
+            Self { cli_path: "claude".to_string() }
+        }
+    }
+
+    fn resolve_npm_global(cmd: &str) -> Option<String> {
+        // Check APPDATA/npm which is the standard npm global bin on Windows
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            let path = std::path::PathBuf::from(&appdata).join("npm").join(cmd);
+            if path.exists() {
+                return Some(path.to_string_lossy().to_string());
+            }
+        }
+        None
     }
 
     /// Invoke Claude Code for plan generation specifically.
     /// Uses --print for non-interactive output.
+    fn build_command(&self, args: &[&str]) -> Command {
+        if cfg!(windows) {
+            // On Windows, run through cmd.exe so .cmd shims are resolved properly
+            let mut cmd = Command::new("cmd");
+            cmd.arg("/C").arg(&self.cli_path);
+            for arg in args {
+                cmd.arg(arg);
+            }
+            cmd
+        } else {
+            let mut cmd = Command::new(&self.cli_path);
+            for arg in args {
+                cmd.arg(arg);
+            }
+            cmd
+        }
+    }
+
     pub async fn invoke_plan(
         &self,
         prompt: &str,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        let output = Command::new(&self.cli_path)
-            .args(["--print", "--output-format", "text"])
+        let mut cmd = self.build_command(&["--print", "--output-format", "text"]);
+        let output = cmd
             .arg(prompt)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -88,8 +119,7 @@ impl ReasoningAdapter for ClaudeCliAdapter {
     }
 
     async fn is_available(&self) -> bool {
-        Command::new(&self.cli_path)
-            .arg("--version")
+        self.build_command(&["--version"])
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
