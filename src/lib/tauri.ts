@@ -17,6 +17,7 @@ import type {
   IacGenerationResult,
   Deployment,
   DnsInstructions,
+  CiCdSecrets,
 } from "./types";
 
 // ── Projects ──
@@ -152,3 +153,6 @@ export const listDeployments = (projectId: string) =>
 
 export const getDnsInstructions = (projectId: string) =>
   invoke<DnsInstructions | null>("get_dns_instructions", { projectId });
+
+export const getCicdSecrets = (projectId: string) =>
+  invoke<CiCdSecrets | null>("get_cicd_secrets", { projectId });

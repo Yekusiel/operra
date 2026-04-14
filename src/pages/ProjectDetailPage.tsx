@@ -60,6 +60,8 @@ export function ProjectDetailPage() {
   const [deployError, setDeployError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [dnsInfo, setDnsInfo] = useState<import("../lib/types").DnsInstructions | null>(null);
+  const [cicdSecrets, setCicdSecrets] = useState<import("../lib/types").CiCdSecrets | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const [workflowOpen, setWorkflowOpen] = useState(true);
 
@@ -644,6 +646,61 @@ export function ProjectDetailPage() {
                       </p>
                     </div>
                   )}
+
+                  {/* CI/CD Setup */}
+                  {project.source_type === "github" && !cicdSecrets && (
+                    <button
+                      className="btn-secondary text-xs w-full justify-center"
+                      onClick={() => api.getCicdSecrets(id!).then(setCicdSecrets)}
+                    >
+                      Show CI/CD Setup Instructions
+                    </button>
+                  )}
+                  {cicdSecrets && (
+                    <div className="rounded-lg border border-purple-200 bg-purple-50 p-4">
+                      <h4 className="text-xs font-semibold text-purple-900 mb-1">
+                        CI/CD Setup (one-time)
+                      </h4>
+                      <p className="text-[10px] text-purple-700 mb-3">
+                        Add these secrets to your GitHub repo so every push to <span className="font-mono font-semibold">{cicdSecrets.branch}</span> auto-deploys.
+                      </p>
+
+                      <a
+                        href={cicdSecrets.secrets_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-purple-700 underline hover:text-purple-900 block mb-3"
+                      >
+                        Open GitHub Secrets settings
+                      </a>
+
+                      <div className="space-y-2">
+                        <SecretRow
+                          label="SERVER_IP"
+                          value={cicdSecrets.server_ip}
+                          copied={copiedField === "SERVER_IP"}
+                          onCopy={() => { navigator.clipboard.writeText(cicdSecrets.server_ip); setCopiedField("SERVER_IP"); setTimeout(() => setCopiedField(null), 2000); }}
+                        />
+                        <SecretRow
+                          label="SSH_USER"
+                          value={cicdSecrets.ssh_user}
+                          copied={copiedField === "SSH_USER"}
+                          onCopy={() => { navigator.clipboard.writeText(cicdSecrets.ssh_user); setCopiedField("SSH_USER"); setTimeout(() => setCopiedField(null), 2000); }}
+                        />
+                        <SecretRow
+                          label="SSH_PRIVATE_KEY"
+                          value={cicdSecrets.ssh_private_key.length > 50 ? cicdSecrets.ssh_private_key.slice(0, 40) + "..." : cicdSecrets.ssh_private_key}
+                          fullValue={cicdSecrets.ssh_private_key}
+                          copied={copiedField === "SSH_PRIVATE_KEY"}
+                          onCopy={() => { navigator.clipboard.writeText(cicdSecrets.ssh_private_key); setCopiedField("SSH_PRIVATE_KEY"); setTimeout(() => setCopiedField(null), 2000); }}
+                        />
+                      </div>
+
+                      <p className="text-[10px] text-purple-600 mt-3">
+                        After adding these secrets, push to <span className="font-mono">{cicdSecrets.branch}</span> to trigger auto-deploy.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -710,6 +767,37 @@ function WorkflowStep({
         <p className="text-xs text-gray-500">{description}</p>
       </div>
       {action}
+    </div>
+  );
+}
+
+function SecretRow({
+  label,
+  value,
+  fullValue,
+  copied,
+  onCopy,
+}: {
+  label: string;
+  value: string;
+  fullValue?: string;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded bg-white border border-purple-100 px-3 py-2">
+      <span className="text-[10px] font-semibold text-purple-800 w-32 shrink-0 font-mono">
+        {label}
+      </span>
+      <span className="text-[10px] text-gray-600 font-mono truncate flex-1" title={fullValue || value}>
+        {value}
+      </span>
+      <button
+        className="text-[10px] text-purple-600 hover:text-purple-800 font-medium shrink-0"
+        onClick={onCopy}
+      >
+        {copied ? "Copied!" : "Copy"}
+      </button>
     </div>
   );
 }

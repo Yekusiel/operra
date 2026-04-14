@@ -553,3 +553,111 @@ pub async fn get_dns_instructions(
         ),
     }))
 }
+
+#[derive(serde::Serialize)]
+pub struct CiCdSecrets {
+    pub github_repo: String,
+    pub secrets_url: String,
+    pub server_ip: String,
+    pub ssh_user: String,
+    pub ssh_private_key: String,
+    pub branch: String,
+}
+
+#[tauri::command]
+pub async fn get_cicd_secrets(
+    state: tauri::State<'_, AppDb>,
+    project_id: String,
+) -> Result<Option<CiCdSecrets>, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let project = crate::models::project::Project::get_by_id(&conn, &project_id)
+        .map_err(|e| e.to_string())?
+        .ok_or("Project not found")?;
+
+    // Only for GitHub projects
+    let github_repo = match project.github_repo.as_deref() {
+        Some(r) if !r.is_empty() => r.to_string(),
+        _ => return Ok(None),
+    };
+
+    let deployments = Deployment::list_for_project(&conn, &project_id)
+        .map_err(|e| e.to_string())?;
+    let latest_completed = deployments.iter().find(|d| d.status == "completed");
+
+    let apply_output = match latest_completed.and_then(|d| d.apply_output.as_ref()) {
+        Some(o) => o,
+        None => return Ok(None),
+    };
+
+    // Extract values from tofu output
+    let server_ip = extract_output_value(apply_output, "static_ip")
+        .unwrap_or_else(|| "COULD_NOT_EXTRACT".to_string());
+
+    let ssh_user = extract_output_value(apply_output, "ssh_user")
+        .or_else(|| extract_ssh_user_from_command(apply_output))
+        .unwrap_or_else(|| "ubuntu".to_string());
+
+    // Get the SSH private key from tofu output
+    let infra_dir = PathBuf::from(&project.repo_path).join("infrastructure");
+    let ssh_key = get_tofu_output_sensitive(&infra_dir, "ssh_private_key").await
+        .unwrap_or_else(|_| "Run: cd infrastructure && tofu output -raw ssh_private_key".to_string());
+
+    Ok(Some(CiCdSecrets {
+        secrets_url: format!("https://github.com/{}/settings/secrets/actions", github_repo),
+        github_repo,
+        server_ip,
+        ssh_user,
+        ssh_private_key: ssh_key,
+        branch: project.github_branch.unwrap_or_else(|| "main".to_string()),
+    }))
+}
+
+fn extract_output_value(output: &str, key: &str) -> Option<String> {
+    output.lines()
+        .find(|l| l.trim().starts_with(key) && l.contains('='))
+        .and_then(|l| l.split('=').nth(1))
+        .map(|v| v.trim().trim_matches('"').to_string())
+}
+
+fn extract_ssh_user_from_command(output: &str) -> Option<String> {
+    // Extract from "ssh_command = ssh -i key.pem ubuntu@1.2.3.4"
+    output.lines()
+        .find(|l| l.contains("ssh_command"))
+        .and_then(|l| l.split('@').next())
+        .and_then(|l| l.split_whitespace().last())
+        .map(|u| u.to_string())
+}
+
+async fn get_tofu_output_sensitive(infra_dir: &Path, key: &str) -> Result<String, String> {
+    if !infra_dir.exists() {
+        return Err("Infrastructure directory not found".to_string());
+    }
+
+    let output = if cfg!(windows) {
+        tokio::process::Command::new("cmd")
+            .args(["/C", "tofu", "output", "-raw", key])
+            .current_dir(infra_dir)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .output()
+            .await
+    } else {
+        tokio::process::Command::new("tofu")
+            .args(["output", "-raw", key])
+            .current_dir(infra_dir)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .output()
+            .await
+    };
+
+    match output {
+        Ok(o) if o.status.success() => {
+            Ok(String::from_utf8_lossy(&o.stdout).trim().to_string())
+        }
+        Ok(o) => Err(String::from_utf8_lossy(&o.stderr).trim().to_string()),
+        Err(e) => Err(format!("Failed to run tofu: {}", e)),
+    }
+}

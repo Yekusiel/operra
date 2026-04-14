@@ -361,6 +361,17 @@ export interface Deployment {
   created_at: string;
 }
 
+// ── CI/CD ──
+
+export interface CiCdSecrets {
+  github_repo: string;
+  secrets_url: string;
+  server_ip: string;
+  ssh_user: string;
+  ssh_private_key: string;
+  branch: string;
+}
+
 // ── DNS ──
 
 export interface DnsInstructions {
