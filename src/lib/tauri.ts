@@ -6,6 +6,9 @@ import type {
   ScanFinding,
   ScanProgress,
   ScanReport,
+  QuestionnaireResponse,
+  Plan,
+  PlanGenerationResult,
 } from "./types";
 
 // ── Projects ──
@@ -40,3 +43,31 @@ export const getScanResults = (scanId: string) =>
 
 export const listScansForProject = (projectId: string) =>
   invoke<Scan[]>("list_scans_for_project", { projectId });
+
+// ── Questionnaire ──
+
+export const getOrCreateQuestionnaire = (projectId: string) =>
+  invoke<QuestionnaireResponse>("get_or_create_questionnaire", { projectId });
+
+export const saveQuestionnaire = (
+  id: string,
+  answersJson: string,
+  completed: boolean
+) => invoke<void>("save_questionnaire", { id, answersJson, completed });
+
+export const getQuestionnaire = (projectId: string) =>
+  invoke<QuestionnaireResponse | null>("get_questionnaire", { projectId });
+
+// ── Plans ──
+
+export const generatePlan = (projectId: string) =>
+  invoke<PlanGenerationResult>("generate_plan", { projectId });
+
+export const getPlan = (planId: string) =>
+  invoke<Plan | null>("get_plan", { planId });
+
+export const getLatestPlan = (projectId: string) =>
+  invoke<Plan | null>("get_latest_plan", { projectId });
+
+export const listPlans = (projectId: string) =>
+  invoke<Plan[]>("list_plans", { projectId });

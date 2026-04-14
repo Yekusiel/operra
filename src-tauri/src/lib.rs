@@ -30,6 +30,13 @@ pub fn run() {
             commands::scan_commands::start_scan,
             commands::scan_commands::get_scan_results,
             commands::scan_commands::list_scans_for_project,
+            commands::questionnaire_commands::get_or_create_questionnaire,
+            commands::questionnaire_commands::save_questionnaire,
+            commands::questionnaire_commands::get_questionnaire,
+            commands::plan_commands::generate_plan,
+            commands::plan_commands::get_plan,
+            commands::plan_commands::get_latest_plan,
+            commands::plan_commands::list_plans,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -9,11 +9,16 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
+  ClipboardList,
+  Cpu,
+  FileText,
 } from "lucide-react";
 import { TopBar } from "../components/layout/TopBar";
 import { ScanProgressIndicator } from "../components/scanner/ScanProgress";
 import { useProject, useDeleteProject } from "../hooks/useProjects";
 import { useScan, useScansForProject } from "../hooks/useScan";
+import { useQuestionnaire } from "../hooks/useQuestionnaire";
+import { useLatestPlan, useGeneratePlan } from "../hooks/usePlan";
 
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -22,6 +27,12 @@ export function ProjectDetailPage() {
   const deleteProject = useDeleteProject();
   const scan = useScan(id!);
   const { data: scans } = useScansForProject(id!);
+  const { data: questionnaire } = useQuestionnaire(id!);
+  const { data: latestPlan } = useLatestPlan(id!);
+  const generatePlan = useGeneratePlan(id!);
+
+  const hasCompletedScan = scans?.some((s) => s.status === "completed");
+  const hasCompletedQuestionnaire = questionnaire?.completed;
 
   if (isLoading) {
     return (
@@ -54,6 +65,14 @@ export function ProjectDetailPage() {
         onSuccess: () => navigate("/"),
       });
     }
+  };
+
+  const handleGeneratePlan = () => {
+    generatePlan.mutate(undefined, {
+      onSuccess: (result) => {
+        navigate(`/projects/${project.id}/plans/${result.plan.id}`);
+      },
+    });
   };
 
   return (
@@ -117,60 +136,126 @@ export function ProjectDetailPage() {
           </dl>
         </div>
 
-        {/* Scan Action */}
+        {/* Workflow Steps */}
         <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-sm font-semibold text-gray-900">
-                Repository Scanner
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Analyze your project to detect technologies, frameworks, and
-                infrastructure patterns.
-              </p>
-            </div>
-            <button
-              className="btn-primary"
-              onClick={() => scan.mutate()}
-              disabled={scan.isPending}
-            >
-              {scan.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Scanning...
-                </>
-              ) : (
-                <>
-                  <Scan className="h-4 w-4" />
-                  Scan Repository
-                </>
-              )}
-            </button>
+          <h2 className="mb-4 text-sm font-semibold text-gray-900">
+            Infrastructure Workflow
+          </h2>
+          <div className="space-y-3">
+            {/* Step 1: Scan */}
+            <WorkflowStep
+              step={1}
+              title="Scan Repository"
+              description="Detect technologies, frameworks, and infrastructure patterns"
+              status={hasCompletedScan ? "completed" : scan.isPending ? "active" : "pending"}
+              action={
+                <button
+                  className="btn-primary text-xs px-3 py-1.5"
+                  onClick={() => scan.mutate()}
+                  disabled={scan.isPending}
+                >
+                  {scan.isPending ? (
+                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Scanning...</>
+                  ) : hasCompletedScan ? (
+                    <><Scan className="h-3.5 w-3.5" /> Re-scan</>
+                  ) : (
+                    <><Scan className="h-3.5 w-3.5" /> Scan</>
+                  )}
+                </button>
+              }
+            />
+
+            {/* Step 2: Questionnaire */}
+            <WorkflowStep
+              step={2}
+              title="Architecture Questionnaire"
+              description="Answer questions about your infrastructure requirements"
+              status={hasCompletedQuestionnaire ? "completed" : "pending"}
+              disabled={!hasCompletedScan}
+              action={
+                <button
+                  className="btn-primary text-xs px-3 py-1.5"
+                  onClick={() => navigate(`/projects/${project.id}/questionnaire`)}
+                  disabled={!hasCompletedScan}
+                >
+                  <ClipboardList className="h-3.5 w-3.5" />
+                  {hasCompletedQuestionnaire ? "Edit Answers" : "Start"}
+                </button>
+              }
+            />
+
+            {/* Step 3: Generate Plan */}
+            <WorkflowStep
+              step={3}
+              title="Generate Infrastructure Plan"
+              description="Use AI to create a tailored AWS architecture plan"
+              status={
+                latestPlan?.status === "completed"
+                  ? "completed"
+                  : generatePlan.isPending
+                    ? "active"
+                    : "pending"
+              }
+              disabled={!hasCompletedScan}
+              action={
+                <button
+                  className="btn-primary text-xs px-3 py-1.5"
+                  onClick={handleGeneratePlan}
+                  disabled={!hasCompletedScan || generatePlan.isPending}
+                >
+                  {generatePlan.isPending ? (
+                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating...</>
+                  ) : (
+                    <><Cpu className="h-3.5 w-3.5" /> Generate Plan</>
+                  )}
+                </button>
+              }
+            />
           </div>
-
-          {scan.isPending && <ScanProgressIndicator progress={scan.progress} />}
-
-          {scan.error && (
-            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-              Scan failed: {String(scan.error)}
-            </div>
-          )}
-
-          {scan.data && !scan.isPending && (
-            <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3">
-              <p className="text-sm font-medium text-green-800">
-                Scan completed successfully
-              </p>
-              <p className="text-xs text-green-700 mt-0.5">
-                Found {scan.data.detections.length} technologies across{" "}
-                {scan.data.files_scanned.toLocaleString()} files
-                {scan.data.inferred_stack && (
-                  <> &middot; Detected: {scan.data.inferred_stack}</>
-                )}
-              </p>
-            </div>
-          )}
         </div>
+
+        {/* Scan progress indicator */}
+        {scan.isPending && <ScanProgressIndicator progress={scan.progress} />}
+
+        {scan.error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            Scan failed: {String(scan.error)}
+          </div>
+        )}
+
+        {generatePlan.error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            Plan generation failed: {String(generatePlan.error)}
+          </div>
+        )}
+
+        {/* Latest Plan Quick View */}
+        {latestPlan && latestPlan.status === "completed" && (
+          <div className="card border-brand-200 bg-brand-50/30">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-brand-600" />
+                <h3 className="text-sm font-semibold text-brand-900">
+                  Latest Infrastructure Plan
+                </h3>
+              </div>
+              <Link
+                to={`/projects/${project.id}/plans/${latestPlan.id}`}
+                className="btn-primary text-xs px-3 py-1.5"
+              >
+                View Full Plan
+              </Link>
+            </div>
+            <p className="text-xs text-brand-700">
+              Generated {new Date(latestPlan.created_at).toLocaleString()}
+            </p>
+            {latestPlan.plan_markdown && (
+              <p className="text-sm text-brand-800 mt-2 line-clamp-3">
+                {latestPlan.plan_markdown.slice(0, 300)}...
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Scan History */}
         {scans && scans.length > 0 && (
@@ -218,6 +303,57 @@ export function ProjectDetailPage() {
         )}
       </div>
     </>
+  );
+}
+
+function WorkflowStep({
+  step,
+  title,
+  description,
+  status,
+  action,
+  disabled,
+}: {
+  step: number;
+  title: string;
+  description: string;
+  status: "pending" | "active" | "completed";
+  action: React.ReactNode;
+  disabled?: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-center gap-4 rounded-lg border px-4 py-3 ${
+        disabled
+          ? "border-gray-100 bg-gray-50 opacity-60"
+          : status === "completed"
+            ? "border-green-200 bg-green-50/50"
+            : status === "active"
+              ? "border-brand-200 bg-brand-50/50"
+              : "border-gray-200 bg-white"
+      }`}
+    >
+      <div
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
+          status === "completed"
+            ? "bg-green-100 text-green-700"
+            : status === "active"
+              ? "bg-brand-100 text-brand-700"
+              : "bg-gray-100 text-gray-500"
+        }`}
+      >
+        {status === "completed" ? (
+          <CheckCircle2 className="h-4 w-4" />
+        ) : (
+          step
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-900">{title}</p>
+        <p className="text-xs text-gray-500">{description}</p>
+      </div>
+      {action}
+    </div>
   );
 }
 
