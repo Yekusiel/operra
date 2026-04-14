@@ -65,7 +65,24 @@ export const CATEGORY_LABELS: Record<string, string> = {
   infrastructure: "Infrastructure",
   config: "Configuration",
   ci_cd: "CI/CD",
+  database: "Databases",
+  queue: "Queues & Background Jobs",
 };
+
+// ── Autofill ──
+
+export interface AutoFillEntry {
+  value: string;
+  reason: string;
+  evidence: string[];
+}
+
+export interface AutoFilledAnswers {
+  database_needs: AutoFillEntry | null;
+  background_jobs: AutoFillEntry | null;
+  networking: AutoFillEntry | null;
+  storage_needs: AutoFillEntry | null;
+}
 
 // ── Questionnaire ──
 

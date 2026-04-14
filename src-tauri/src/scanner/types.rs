@@ -8,6 +8,8 @@ pub enum FindingCategory {
     Infrastructure,
     Config,
     CiCd,
+    Database,
+    Queue,
 }
 
 impl FindingCategory {
@@ -18,6 +20,8 @@ impl FindingCategory {
             FindingCategory::Infrastructure => "infrastructure",
             FindingCategory::Config => "config",
             FindingCategory::CiCd => "ci_cd",
+            FindingCategory::Database => "database",
+            FindingCategory::Queue => "queue",
         }
     }
 }

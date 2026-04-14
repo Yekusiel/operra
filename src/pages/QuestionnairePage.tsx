@@ -5,6 +5,7 @@ import {
   ArrowRight,
   CheckCircle2,
   ClipboardList,
+  Cpu,
 } from "lucide-react";
 import { TopBar } from "../components/layout/TopBar";
 import { useProject } from "../hooks/useProjects";
@@ -13,7 +14,8 @@ import {
   useGetOrCreateQuestionnaire,
   useSaveQuestionnaire,
 } from "../hooks/useQuestionnaire";
-import type { ArchitectureAnswers } from "../lib/types";
+import * as api from "../lib/tauri";
+import type { ArchitectureAnswers, AutoFilledAnswers, AutoFillEntry } from "../lib/types";
 import { ARCHITECTURE_QUESTIONS } from "../lib/types";
 
 export function QuestionnairePage() {
@@ -27,31 +29,56 @@ export function QuestionnairePage() {
   const [questionnaireId, setQuestionnaireId] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<ArchitectureAnswers>({});
+  const [autofill, setAutofill] = useState<AutoFilledAnswers | null>(null);
 
-  // Initialize questionnaire
+  // Fetch autofill suggestions from scan findings
+  useEffect(() => {
+    api.getAutofillSuggestions(projectId!).then(setAutofill).catch(() => {});
+  }, [projectId]);
+
+  // Initialize questionnaire and apply autofill to empty fields
   useEffect(() => {
     if (existing) {
       setQuestionnaireId(existing.id);
       try {
-        const parsed = JSON.parse(existing.answers_json);
-        setAnswers(parsed);
+        const parsed = JSON.parse(existing.answers_json) as ArchitectureAnswers;
+        // Apply autofill only to fields the user hasn't already answered
+        if (autofill) {
+          const merged = { ...parsed };
+          if (!merged.database_needs && autofill.database_needs) {
+            merged.database_needs = autofill.database_needs.value;
+          }
+          if (!merged.background_jobs && autofill.background_jobs) {
+            merged.background_jobs = autofill.background_jobs.value;
+          }
+          if (!merged.networking && autofill.networking) {
+            merged.networking = autofill.networking.value;
+          }
+          if (!merged.storage_needs && autofill.storage_needs) {
+            merged.storage_needs = autofill.storage_needs.value;
+          }
+          setAnswers(merged);
+        } else {
+          setAnswers(parsed);
+        }
       } catch {
-        // ignore parse errors
+        // ignore
       }
     } else if (!getOrCreate.isPending && !getOrCreate.data) {
       getOrCreate.mutate(undefined, {
         onSuccess: (q) => {
           setQuestionnaireId(q.id);
-          try {
-            const parsed = JSON.parse(q.answers_json);
-            setAnswers(parsed);
-          } catch {
-            // ignore
-          }
+          // Pre-fill from autofill for brand new questionnaire
+          const initial: ArchitectureAnswers = {};
+          if (autofill?.database_needs) initial.database_needs = autofill.database_needs.value;
+          if (autofill?.background_jobs) initial.background_jobs = autofill.background_jobs.value;
+          if (autofill?.networking) initial.networking = autofill.networking.value;
+          if (autofill?.storage_needs) initial.storage_needs = autofill.storage_needs.value;
+          setAnswers(initial);
         },
       });
     }
-  }, [existing]);
+  }, [existing, autofill]);
 
   const question = ARCHITECTURE_QUESTIONS[currentStep];
   const totalSteps = ARCHITECTURE_QUESTIONS.length;
@@ -60,11 +87,16 @@ export function QuestionnairePage() {
 
   const currentValue = question ? answers[question.key] || "" : "";
 
+  // Get autofill entry for current question if available
+  const currentAutofill: AutoFillEntry | null =
+    question && autofill
+      ? (autofill as unknown as Record<string, AutoFillEntry | null>)[question.key] ?? null
+      : null;
+
   const handleSelect = (value: string) => {
     const updated = { ...answers, [question.key]: value };
     setAnswers(updated);
 
-    // Auto-save draft
     if (questionnaireId) {
       save.mutate({
         id: questionnaireId,
@@ -76,7 +108,6 @@ export function QuestionnairePage() {
 
   const handleNext = () => {
     if (isLast) {
-      // Complete the questionnaire
       if (questionnaireId) {
         save.mutate(
           {
@@ -142,6 +173,24 @@ export function QuestionnairePage() {
             </div>
           </div>
 
+          {/* Auto-detected banner */}
+          {currentAutofill && (
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3">
+              <Cpu className="h-4 w-4 text-brand-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-medium text-brand-800">
+                  Auto-detected from your codebase
+                </p>
+                <p className="text-xs text-brand-700 mt-0.5">
+                  {currentAutofill.reason}
+                </p>
+                <p className="text-[10px] text-brand-600 mt-0.5">
+                  Evidence: {currentAutofill.evidence.join(", ")}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Question card */}
           <div className="card">
             <div className="flex items-start gap-3 mb-6">
@@ -158,30 +207,41 @@ export function QuestionnairePage() {
 
             {question.type === "select" && question.options && (
               <div className="space-y-2">
-                {question.options.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => handleSelect(option.value)}
-                    className={`flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left text-sm transition-colors ${
-                      currentValue === option.value
-                        ? "border-brand-500 bg-brand-50 text-brand-900"
-                        : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50"
-                    }`}
-                  >
-                    <div
-                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                {question.options.map((option) => {
+                  const isAutoFilled =
+                    currentAutofill?.value === option.value &&
+                    currentValue === option.value;
+
+                  return (
+                    <button
+                      key={option.value}
+                      onClick={() => handleSelect(option.value)}
+                      className={`flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left text-sm transition-colors ${
                         currentValue === option.value
-                          ? "border-brand-600 bg-brand-600"
-                          : "border-gray-300"
+                          ? "border-brand-500 bg-brand-50 text-brand-900"
+                          : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50"
                       }`}
                     >
-                      {currentValue === option.value && (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-white" />
+                      <div
+                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                          currentValue === option.value
+                            ? "border-brand-600 bg-brand-600"
+                            : "border-gray-300"
+                        }`}
+                      >
+                        {currentValue === option.value && (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-white" />
+                        )}
+                      </div>
+                      <span className="flex-1">{option.label}</span>
+                      {isAutoFilled && (
+                        <span className="badge-blue text-[10px]">
+                          Auto-detected
+                        </span>
                       )}
-                    </div>
-                    {option.label}
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
@@ -227,6 +287,11 @@ export function QuestionnairePage() {
               {ARCHITECTURE_QUESTIONS.map((q, i) => {
                 const val = answers[q.key];
                 const option = q.options?.find((o) => o.value === val);
+                const af = autofill
+                  ? (autofill as unknown as Record<string, AutoFillEntry | null>)[q.key]
+                  : null;
+                const isAutoFilled = af?.value === val && !!val;
+
                 return (
                   <button
                     key={q.key}
@@ -242,9 +307,12 @@ export function QuestionnairePage() {
                         val ? "bg-green-500" : "bg-gray-300"
                       }`}
                     />
-                    <span className="truncate">
-                      {q.label}: {option?.label || val || "—"}
+                    <span className="truncate flex-1">
+                      {q.label}: {option?.label || val || "\u2014"}
                     </span>
+                    {isAutoFilled && (
+                      <Cpu className="h-3 w-3 text-brand-500 shrink-0" />
+                    )}
                   </button>
                 );
               })}

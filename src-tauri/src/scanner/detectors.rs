@@ -309,6 +309,239 @@ pub fn detect_all(repo_root: &Path) -> Vec<Detection> {
         });
     }
 
+    // === Databases ===
+
+    if let Some(ref pkg) = pkg_json {
+        // PostgreSQL (Node)
+        if package_json_has_dep(pkg, "pg") || package_json_has_dep(pkg, "postgres") || package_json_has_dep(pkg, "knex") || package_json_has_dep(pkg, "prisma") {
+            let db_type = if package_json_has_dep(pkg, "prisma") { "Prisma ORM" } else { "PostgreSQL" };
+            detections.push(Detection {
+                category: FindingCategory::Database,
+                name: db_type.to_string(),
+                confidence: 0.9,
+                evidence_path: "package.json".to_string(),
+                metadata: Some(serde_json::json!({"db_type": "relational"})),
+            });
+        }
+
+        // MySQL (Node)
+        if package_json_has_dep(pkg, "mysql2") || package_json_has_dep(pkg, "mysql") {
+            detections.push(Detection {
+                category: FindingCategory::Database,
+                name: "MySQL".to_string(),
+                confidence: 0.9,
+                evidence_path: "package.json".to_string(),
+                metadata: Some(serde_json::json!({"db_type": "relational"})),
+            });
+        }
+
+        // MongoDB (Node)
+        if package_json_has_dep(pkg, "mongodb") || package_json_has_dep(pkg, "mongoose") {
+            detections.push(Detection {
+                category: FindingCategory::Database,
+                name: "MongoDB".to_string(),
+                confidence: 0.9,
+                evidence_path: "package.json".to_string(),
+                metadata: Some(serde_json::json!({"db_type": "nosql"})),
+            });
+        }
+
+        // Redis (Node)
+        if package_json_has_dep(pkg, "redis") || package_json_has_dep(pkg, "ioredis") {
+            detections.push(Detection {
+                category: FindingCategory::Database,
+                name: "Redis".to_string(),
+                confidence: 0.9,
+                evidence_path: "package.json".to_string(),
+                metadata: Some(serde_json::json!({"db_type": "cache"})),
+            });
+        }
+
+        // DynamoDB (Node)
+        if package_json_has_dep(pkg, "@aws-sdk/client-dynamodb")
+            || package_json_has_dep(pkg, "@aws-sdk/lib-dynamodb")
+            || package_json_has_dep(pkg, "dynamoose")
+        {
+            detections.push(Detection {
+                category: FindingCategory::Database,
+                name: "DynamoDB".to_string(),
+                confidence: 0.9,
+                evidence_path: "package.json".to_string(),
+                metadata: Some(serde_json::json!({"db_type": "nosql"})),
+            });
+        }
+
+        // SQLite (Node)
+        if package_json_has_dep(pkg, "better-sqlite3") || package_json_has_dep(pkg, "sqlite3") {
+            detections.push(Detection {
+                category: FindingCategory::Database,
+                name: "SQLite".to_string(),
+                confidence: 0.85,
+                evidence_path: "package.json".to_string(),
+                metadata: Some(serde_json::json!({"db_type": "relational"})),
+            });
+        }
+    }
+
+    // Python databases
+    if let Some(ref req) = read_file(repo_root, "requirements.txt") {
+        let req_lower = req.to_lowercase();
+        if req_lower.contains("psycopg2") || req_lower.contains("asyncpg") || req_lower.contains("sqlalchemy") {
+            detections.push(Detection {
+                category: FindingCategory::Database,
+                name: "PostgreSQL".to_string(),
+                confidence: 0.85,
+                evidence_path: "requirements.txt".to_string(),
+                metadata: Some(serde_json::json!({"db_type": "relational"})),
+            });
+        }
+        if req_lower.contains("pymongo") || req_lower.contains("mongoengine") {
+            detections.push(Detection {
+                category: FindingCategory::Database,
+                name: "MongoDB".to_string(),
+                confidence: 0.85,
+                evidence_path: "requirements.txt".to_string(),
+                metadata: Some(serde_json::json!({"db_type": "nosql"})),
+            });
+        }
+        if req_lower.contains("redis") {
+            detections.push(Detection {
+                category: FindingCategory::Database,
+                name: "Redis".to_string(),
+                confidence: 0.85,
+                evidence_path: "requirements.txt".to_string(),
+                metadata: Some(serde_json::json!({"db_type": "cache"})),
+            });
+        }
+        if req_lower.contains("mysqlclient") || req_lower.contains("pymysql") {
+            detections.push(Detection {
+                category: FindingCategory::Database,
+                name: "MySQL".to_string(),
+                confidence: 0.85,
+                evidence_path: "requirements.txt".to_string(),
+                metadata: Some(serde_json::json!({"db_type": "relational"})),
+            });
+        }
+    }
+
+    // Detect DB from env example files
+    if let Some(ref env) = read_file(repo_root, ".env.example") {
+        let env_upper = env.to_uppercase();
+        if env_upper.contains("DATABASE_URL") || env_upper.contains("DB_HOST") || env_upper.contains("POSTGRES") {
+            if !detections.iter().any(|d| d.category == FindingCategory::Database) {
+                detections.push(Detection {
+                    category: FindingCategory::Database,
+                    name: "Database (from env)".to_string(),
+                    confidence: 0.6,
+                    evidence_path: ".env.example".to_string(),
+                    metadata: Some(serde_json::json!({"db_type": "relational"})),
+                });
+            }
+        }
+        if env_upper.contains("REDIS") {
+            if !detections.iter().any(|d| d.name == "Redis") {
+                detections.push(Detection {
+                    category: FindingCategory::Database,
+                    name: "Redis".to_string(),
+                    confidence: 0.6,
+                    evidence_path: ".env.example".to_string(),
+                    metadata: Some(serde_json::json!({"db_type": "cache"})),
+                });
+            }
+        }
+    }
+
+    // === Queues / Background Jobs ===
+
+    if let Some(ref pkg) = pkg_json {
+        // Bull / BullMQ (Node)
+        if package_json_has_dep(pkg, "bull") || package_json_has_dep(pkg, "bullmq") {
+            detections.push(Detection {
+                category: FindingCategory::Queue,
+                name: "Bull/BullMQ".to_string(),
+                confidence: 0.9,
+                evidence_path: "package.json".to_string(),
+                metadata: Some(serde_json::json!({"queue_type": "redis_backed"})),
+            });
+        }
+
+        // SQS (Node)
+        if package_json_has_dep(pkg, "@aws-sdk/client-sqs") || package_json_has_dep(pkg, "sqs-consumer") {
+            detections.push(Detection {
+                category: FindingCategory::Queue,
+                name: "AWS SQS".to_string(),
+                confidence: 0.9,
+                evidence_path: "package.json".to_string(),
+                metadata: Some(serde_json::json!({"queue_type": "aws_native"})),
+            });
+        }
+
+        // RabbitMQ / AMQP (Node)
+        if package_json_has_dep(pkg, "amqplib") || package_json_has_dep(pkg, "amqp-connection-manager") {
+            detections.push(Detection {
+                category: FindingCategory::Queue,
+                name: "RabbitMQ".to_string(),
+                confidence: 0.85,
+                evidence_path: "package.json".to_string(),
+                metadata: Some(serde_json::json!({"queue_type": "amqp"})),
+            });
+        }
+
+        // Kafka (Node)
+        if package_json_has_dep(pkg, "kafkajs") || package_json_has_dep(pkg, "kafka-node") {
+            detections.push(Detection {
+                category: FindingCategory::Queue,
+                name: "Kafka".to_string(),
+                confidence: 0.9,
+                evidence_path: "package.json".to_string(),
+                metadata: Some(serde_json::json!({"queue_type": "event_streaming"})),
+            });
+        }
+
+        // node-cron / agenda (simple scheduled tasks)
+        if package_json_has_dep(pkg, "node-cron") || package_json_has_dep(pkg, "agenda") || package_json_has_dep(pkg, "node-schedule") {
+            detections.push(Detection {
+                category: FindingCategory::Queue,
+                name: "Scheduled Tasks".to_string(),
+                confidence: 0.8,
+                evidence_path: "package.json".to_string(),
+                metadata: Some(serde_json::json!({"queue_type": "scheduler"})),
+            });
+        }
+    }
+
+    // Python queues
+    if let Some(ref req) = read_file(repo_root, "requirements.txt") {
+        let req_lower = req.to_lowercase();
+        if req_lower.contains("celery") {
+            detections.push(Detection {
+                category: FindingCategory::Queue,
+                name: "Celery".to_string(),
+                confidence: 0.9,
+                evidence_path: "requirements.txt".to_string(),
+                metadata: Some(serde_json::json!({"queue_type": "task_queue"})),
+            });
+        }
+        if req_lower.contains("rq") || req_lower.contains("python-rq") {
+            detections.push(Detection {
+                category: FindingCategory::Queue,
+                name: "RQ (Redis Queue)".to_string(),
+                confidence: 0.85,
+                evidence_path: "requirements.txt".to_string(),
+                metadata: Some(serde_json::json!({"queue_type": "redis_backed"})),
+            });
+        }
+        if req_lower.contains("dramatiq") {
+            detections.push(Detection {
+                category: FindingCategory::Queue,
+                name: "Dramatiq".to_string(),
+                confidence: 0.85,
+                evidence_path: "requirements.txt".to_string(),
+                metadata: Some(serde_json::json!({"queue_type": "task_queue"})),
+            });
+        }
+    }
+
     // === CI/CD ===
 
     if repo_root.join(".github/workflows").is_dir() {

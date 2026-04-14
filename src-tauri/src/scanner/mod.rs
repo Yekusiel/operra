@@ -1,3 +1,4 @@
+pub mod autofill;
 pub mod detectors;
 pub mod types;
 

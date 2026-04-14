@@ -7,6 +7,7 @@ import type {
   ScanProgress,
   ScanReport,
   QuestionnaireResponse,
+  AutoFilledAnswers,
   Plan,
   PlanGenerationResult,
 } from "./types";
@@ -57,6 +58,9 @@ export const saveQuestionnaire = (
 
 export const getQuestionnaire = (projectId: string) =>
   invoke<QuestionnaireResponse | null>("get_questionnaire", { projectId });
+
+export const getAutofillSuggestions = (projectId: string) =>
+  invoke<AutoFilledAnswers>("get_autofill_suggestions", { projectId });
 
 // ── Plans ──
 

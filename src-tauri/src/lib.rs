@@ -33,6 +33,7 @@ pub fn run() {
             commands::questionnaire_commands::get_or_create_questionnaire,
             commands::questionnaire_commands::save_questionnaire,
             commands::questionnaire_commands::get_questionnaire,
+            commands::questionnaire_commands::get_autofill_suggestions,
             commands::plan_commands::generate_plan,
             commands::plan_commands::get_plan,
             commands::plan_commands::get_latest_plan,
