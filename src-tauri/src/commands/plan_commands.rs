@@ -90,9 +90,11 @@ pub async fn generate_plan(
 
             // Parse and store individual plan options (Plan A, Plan B, etc.)
             let parsed_options = plan_option::parse_plan_options(&response);
-            for (label, title, content) in &parsed_options {
+            for (_label, title, content) in &parsed_options {
+                let actual_label = PlanOption::next_label(&conn, &plan.id)
+                    .map_err(|e| e.to_string())?;
                 PlanOption::create(
-                    &conn, &plan.id, label, title, content, "generation", None,
+                    &conn, &plan.id, &actual_label, title, content, "generation", None,
                 )
                 .map_err(|e| e.to_string())?;
             }
