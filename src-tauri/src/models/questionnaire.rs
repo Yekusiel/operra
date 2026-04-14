@@ -83,6 +83,14 @@ impl QuestionnaireResponse {
         }
     }
 
+    pub fn delete_all_for_project(conn: &Connection, project_id: &str) -> Result<(), rusqlite::Error> {
+        conn.execute(
+            "DELETE FROM questionnaire_responses WHERE project_id = ?1",
+            params![project_id],
+        )?;
+        Ok(())
+    }
+
     fn from_row(row: &rusqlite::Row) -> Result<QuestionnaireResponse, rusqlite::Error> {
         Ok(QuestionnaireResponse {
             id: row.get(0)?,

@@ -59,6 +59,9 @@ export const saveQuestionnaire = (
 export const getQuestionnaire = (projectId: string) =>
   invoke<QuestionnaireResponse | null>("get_questionnaire", { projectId });
 
+export const resetQuestionnaire = (projectId: string) =>
+  invoke<QuestionnaireResponse>("reset_questionnaire", { projectId });
+
 export const getAutofillSuggestions = (projectId: string) =>
   invoke<AutoFilledAnswers>("get_autofill_suggestions", { projectId });
 

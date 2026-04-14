@@ -38,6 +38,17 @@ pub async fn get_questionnaire(
 }
 
 #[tauri::command]
+pub async fn reset_questionnaire(
+    state: tauri::State<'_, AppDb>,
+    project_id: String,
+) -> Result<QuestionnaireResponse, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    QuestionnaireResponse::delete_all_for_project(&conn, &project_id)
+        .map_err(|e| e.to_string())?;
+    QuestionnaireResponse::create_or_get(&conn, &project_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn get_autofill_suggestions(
     state: tauri::State<'_, AppDb>,
     project_id: String,

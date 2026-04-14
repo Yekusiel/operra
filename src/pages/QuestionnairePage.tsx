@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ClipboardList,
   Cpu,
+  RotateCcw,
 } from "lucide-react";
 import { TopBar } from "../components/layout/TopBar";
 import { useProject } from "../hooks/useProjects";
@@ -133,6 +134,22 @@ export function QuestionnairePage() {
     }
   };
 
+  const handleReset = () => {
+    if (window.confirm("Reset all questionnaire answers? This cannot be undone.")) {
+      api.resetQuestionnaire(projectId!).then((q) => {
+        setQuestionnaireId(q.id);
+        setCurrentStep(0);
+        // Re-apply only autofill defaults
+        const initial: ArchitectureAnswers = {};
+        if (autofill?.database_needs) initial.database_needs = autofill.database_needs.value;
+        if (autofill?.background_jobs) initial.background_jobs = autofill.background_jobs.value;
+        if (autofill?.networking) initial.networking = autofill.networking.value;
+        if (autofill?.storage_needs) initial.storage_needs = autofill.storage_needs.value;
+        setAnswers(initial);
+      });
+    }
+  };
+
   if (!question) return null;
 
   return (
@@ -141,13 +158,19 @@ export function QuestionnairePage() {
         title="Architecture Questionnaire"
         subtitle={project?.name}
         actions={
-          <button
-            className="btn-secondary"
-            onClick={() => navigate(`/projects/${projectId}`)}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Project
-          </button>
+          <div className="flex items-center gap-2">
+            <button className="btn-secondary" onClick={handleReset}>
+              <RotateCcw className="h-4 w-4" />
+              Reset
+            </button>
+            <button
+              className="btn-secondary"
+              onClick={() => navigate(`/projects/${projectId}`)}
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Project
+            </button>
+          </div>
         }
       />
 
