@@ -3,9 +3,9 @@ import { FolderKanban, LayoutDashboard, DollarSign, Activity, Settings } from "l
 
 const navItems = [
   { to: "/", icon: FolderKanban, label: "Projects" },
-  { to: "/setup", icon: Settings, label: "Setup" },
   { to: "/monitoring", icon: Activity, label: "Monitoring", disabled: true },
   { to: "/costs", icon: DollarSign, label: "Cost Explorer", disabled: true },
+  { to: "/setup", icon: Settings, label: "Setup" },
 ];
 
 export function Sidebar() {

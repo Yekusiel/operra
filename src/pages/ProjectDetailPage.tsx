@@ -186,9 +186,21 @@ export function ProjectDetailPage() {
                 <Cloud className="h-3.5 w-3.5" />
                 AWS
               </dt>
-              <dd className="mt-0.5 text-gray-900">
-                {project.aws_profile || "Not configured"} /{" "}
-                {project.aws_region}
+              <dd className="mt-0.5 flex items-center gap-2 text-gray-900">
+                <span>{project.aws_profile || "default"} / {project.aws_region}</span>
+                {awsConn?.status === "connected" ? (
+                  <span className="badge-green">Connected</span>
+                ) : awsConn?.status === "failed" ? (
+                  <span className="badge-red">Not connected</span>
+                ) : (
+                  <button
+                    className="text-[10px] text-brand-600 hover:text-brand-700 underline"
+                    onClick={handleTestAws}
+                    disabled={awsChecking}
+                  >
+                    {awsChecking ? "Checking..." : "Test"}
+                  </button>
+                )}
               </dd>
             </div>
             <div>
@@ -383,43 +395,7 @@ export function ProjectDetailPage() {
           </div>
         </div>
 
-        {/* AWS Connection */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Cloud className="h-4.5 w-4.5 text-gray-600" />
-              <h2 className="text-sm font-semibold text-gray-900">AWS Connection</h2>
-            </div>
-            <button
-              className="btn-secondary text-xs px-3 py-1.5"
-              onClick={handleTestAws}
-              disabled={awsChecking}
-            >
-              {awsChecking ? (
-                <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking...</>
-              ) : (
-                "Test Connection"
-              )}
-            </button>
-          </div>
-          {awsConn?.status === "connected" ? (
-            <div className="rounded-lg border border-green-200 bg-green-50 p-3">
-              <p className="text-sm font-medium text-green-800">Connected</p>
-              <p className="text-xs text-green-700 mt-0.5 font-mono">
-                Account: {awsConn.account_id} &middot; {awsConn.arn}
-              </p>
-            </div>
-          ) : awsConn?.status === "failed" ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-              <p className="text-sm font-medium text-red-800">Not Connected</p>
-              <p className="text-xs text-red-700 mt-0.5">{awsConn.error_msg}</p>
-            </div>
-          ) : (
-            <p className="text-xs text-gray-500">
-              Click "Test Connection" to verify your AWS credentials for profile "{project.aws_profile || "default"}" in {project.aws_region}.
-            </p>
-          )}
-        </div>
+        {/* AWS Connection Status (inline in project details) */}
 
         {/* Scan progress indicator */}
         {scan.isPending && <ScanProgressIndicator progress={scan.progress} />}
