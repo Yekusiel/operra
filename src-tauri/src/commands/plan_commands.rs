@@ -186,17 +186,14 @@ pub async fn approve_plan_option(
 ) -> Result<PlanOption, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     PlanOption::approve(&conn, &option_id).map_err(|e| e.to_string())?;
-    PlanOption::get_approved(&conn, {
-        // Get plan_id from the option
-        let opts = conn.query_row(
-            "SELECT plan_id FROM plan_options WHERE id = ?1",
-            rusqlite::params![option_id],
-            |row| row.get::<_, String>(0),
-        ).map_err(|e| e.to_string())?;
-        &opts
-    }.as_str())
-    .map_err(|e| e.to_string())?
-    .ok_or("Option not found after approval".to_string())
+    let plan_id: String = conn.query_row(
+        "SELECT plan_id FROM plan_options WHERE id = ?1",
+        rusqlite::params![option_id],
+        |row| row.get(0),
+    ).map_err(|e| e.to_string())?;
+    PlanOption::get_approved(&conn, &plan_id)
+        .map_err(|e| e.to_string())?
+        .ok_or("Option not found after approval".to_string())
 }
 
 #[tauri::command]
@@ -417,7 +414,7 @@ pub async fn send_plan_message(
             // Check if the response contains new plan options
             let new_options = plan_option::parse_plan_options(&response);
             if !new_options.is_empty() {
-                for (label, title, content) in &new_options {
+                for (_label, title, content) in &new_options {
                     // Use next available label to avoid duplicates
                     let actual_label = PlanOption::next_label(&conn, &plan_id)
                         .map_err(|e| e.to_string())?;
