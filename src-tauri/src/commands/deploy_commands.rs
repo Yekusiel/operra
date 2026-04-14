@@ -72,11 +72,17 @@ Generate complete, working OpenTofu files. Output ONLY the file contents in this
 === FILE: outputs.tf ===
 <file contents>
 
+Also generate a terraform.tfvars file with sensible default values for all variables:
+
+=== FILE: terraform.tfvars ===
+<variable values>
+
 Rules:
 - Use the `aws` provider with the specified region
 - Use realistic, production-ready configurations
 - Include proper tagging (Project, ManagedBy=Operra)
 - Use variables for anything that should be configurable
+- EVERY variable MUST have a default value in variables.tf OR a value in terraform.tfvars
 - Include outputs for important values (endpoints, ARNs, etc.)
 - Add comments explaining non-obvious choices
 - Do NOT include any markdown formatting, explanations, or text outside the === FILE: === blocks
@@ -152,8 +158,8 @@ fn write_iac_file(output_dir: &Path, filename: &str, content: &str) -> Result<()
         .filter(|c| c.is_alphanumeric() || *c == '.' || *c == '-' || *c == '_')
         .collect();
 
-    if safe_name.is_empty() || !safe_name.ends_with(".tf") {
-        return Ok(()); // Skip non-.tf files
+    if safe_name.is_empty() || (!safe_name.ends_with(".tf") && !safe_name.ends_with(".tfvars")) {
+        return Ok(()); // Skip non-terraform files
     }
 
     let path = output_dir.join(&safe_name);
@@ -187,7 +193,7 @@ pub async fn run_tofu_plan(
     // Create deployment record
     let deployment = {
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
-        Deployment::create(&conn, &project_id, None, "apply")
+        Deployment::create(&conn, &project_id, None, "plan")
             .map_err(|e| e.to_string())?
     };
 

@@ -56,6 +56,7 @@ export function ProjectDetailPage() {
   const [iacError, setIacError] = useState<string | null>(null);
   const [tofuPlanning, setTofuPlanning] = useState(false);
   const [deployment, setDeployment] = useState<import("../lib/types").Deployment | null>(null);
+  const [planError, setPlanError] = useState<string | null>(null);
   const [deployError, setDeployError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
 
@@ -92,10 +93,10 @@ export function ProjectDetailPage() {
 
   const handleTofuPlan = () => {
     setTofuPlanning(true);
-    setDeployError(null);
+    setPlanError(null);
     api.runTofuPlan(id!)
       .then(setDeployment)
-      .catch((e) => setDeployError(String(e)))
+      .catch((e) => setPlanError(String(e)))
       .finally(() => setTofuPlanning(false));
   };
 
@@ -508,6 +509,12 @@ export function ProjectDetailPage() {
                   </button>
                 }
               />
+
+              {planError && (
+                <div className="ml-12 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  Plan review failed: {planError}
+                </div>
+              )}
 
               {/* Deployment review inline */}
               {deployment && deployment.status === "awaiting_approval" && (
