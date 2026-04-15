@@ -237,7 +237,7 @@ npm run build
 # Start with PM2
 pm2 start npm --name "{project}" -- start
 pm2 save
-pm2 startup systemd -u {ssh_user} --hp /home/{ssh_user} | tail -1 | bash
+env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u {ssh_user} --hp /home/{ssh_user} || true
 
 echo "Next.js app started with PM2"
 
@@ -285,7 +285,7 @@ npm run build
 # Start with PM2
 pm2 start npm --name "{project}" -- start
 pm2 save
-pm2 startup systemd -u {ssh_user} --hp /home/{ssh_user} | tail -1 | bash
+env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u {ssh_user} --hp /home/{ssh_user} || true
 
 echo "Next.js app started with PM2"
 
@@ -351,7 +351,7 @@ elif [ -f "app.js" ]; then
 fi
 
 pm2 save
-pm2 startup systemd -u {ssh_user} --hp /home/{ssh_user} | tail -1 | bash
+env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u {ssh_user} --hp /home/{ssh_user} || true
 
 echo "Node.js API started with PM2"
 
