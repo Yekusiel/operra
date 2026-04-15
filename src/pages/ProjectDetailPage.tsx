@@ -587,11 +587,13 @@ export function ProjectDetailPage() {
                 title="Review Deployment Plan"
                 description="Run tofu plan and review what will be created, updated, or destroyed"
                 status={
-                  deployment?.status === "awaiting_approval" || deployment?.status === "approved"
+                  deployment?.status === "awaiting_approval" || deployment?.status === "approved" || deployment?.status === "completed"
                     ? "completed"
                     : tofuPlanning
                       ? "active"
-                      : "pending"
+                      : deployment?.status === "failed" && !deployment?.approved
+                        ? "pending"
+                        : "pending"
                 }
                 disabled={!hasIac}
                 action={
