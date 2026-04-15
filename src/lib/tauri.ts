@@ -32,6 +32,9 @@ export const listProjects = () => invoke<Project[]>("list_projects");
 export const getProject = (id: string) =>
   invoke<Project | null>("get_project", { id });
 
+export const updateProject = (id: string, input: CreateProjectInput) =>
+  invoke<Project>("update_project", { id, input });
+
 export const deleteProject = (id: string) =>
   invoke<boolean>("delete_project", { id });
 

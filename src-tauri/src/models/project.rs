@@ -79,6 +79,32 @@ impl Project {
         }
     }
 
+    pub fn update(conn: &Connection, id: &str, input: CreateProjectInput) -> Result<Project, rusqlite::Error> {
+        let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        conn.execute(
+            "UPDATE projects SET name = ?1, source_type = ?2, repo_path = ?3, github_repo = ?4,
+             github_branch = ?5, aws_profile = ?6, aws_region = ?7, aws_access_key_id = ?8,
+             aws_secret_access_key = ?9, domain = ?10, description = ?11, updated_at = ?12
+             WHERE id = ?13",
+            params![
+                input.name,
+                input.source_type.unwrap_or_else(|| "local".to_string()),
+                input.repo_path.unwrap_or_default(),
+                input.github_repo,
+                input.github_branch.or(Some("main".to_string())),
+                input.aws_profile,
+                input.aws_region.unwrap_or_else(|| "us-east-1".to_string()),
+                input.aws_access_key_id,
+                input.aws_secret_access_key,
+                input.domain,
+                input.description,
+                now,
+                id,
+            ],
+        )?;
+        Self::get_by_id(conn, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)
+    }
+
     pub fn delete(conn: &Connection, id: &str) -> Result<bool, rusqlite::Error> {
         let affected = conn.execute("DELETE FROM projects WHERE id = ?1", params![id])?;
         Ok(affected > 0)

@@ -19,6 +19,7 @@ import {
   ChevronDown,
   ChevronRight,
   RotateCcw,
+  Settings2,
 } from "lucide-react";
 import { TopBar } from "../components/layout/TopBar";
 import { ScanProgressIndicator } from "../components/scanner/ScanProgress";
@@ -197,6 +198,13 @@ export function ProjectDetailPage() {
             <button className="btn-secondary" onClick={() => navigate("/")}>
               <ArrowLeft className="h-4 w-4" />
               Back
+            </button>
+            <button
+              className="btn-secondary"
+              onClick={() => navigate(`/projects/${project.id}/settings`)}
+            >
+              <Settings2 className="h-4 w-4" />
+              Settings
             </button>
             <button
               className="btn-danger"

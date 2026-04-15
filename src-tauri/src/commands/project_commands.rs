@@ -57,6 +57,16 @@ pub async fn get_project(
 }
 
 #[tauri::command]
+pub async fn update_project(
+    state: tauri::State<'_, AppDb>,
+    id: String,
+    input: CreateProjectInput,
+) -> Result<Project, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    Project::update(&conn, &id, input).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn delete_project(
     state: tauri::State<'_, AppDb>,
     id: String,

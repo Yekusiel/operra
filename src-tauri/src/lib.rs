@@ -29,6 +29,7 @@ pub fn run() {
             commands::project_commands::create_project,
             commands::project_commands::list_projects,
             commands::project_commands::get_project,
+            commands::project_commands::update_project,
             commands::project_commands::delete_project,
             // Scanner
             commands::scan_commands::start_scan,
