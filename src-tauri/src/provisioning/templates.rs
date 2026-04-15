@@ -392,13 +392,16 @@ if ! command -v caddy &>/dev/null; then
 fi
 
 # Configure Caddy for static files
-CADDY_CONFIG="{domain_block} {{
+cat > /etc/caddy/Caddyfile <<CADDYEOF
+:80 {{
     root * $BUILD_DIR
     file_server
     encode gzip
-}}"
+}}
+{domain_extra}
+CADDYEOF
 
-echo "$CADDY_CONFIG" > /etc/caddy/Caddyfile
+systemctl enable caddy
 systemctl restart caddy
 
 echo "Static site deployed"
@@ -406,10 +409,10 @@ echo "Static site deployed"
 "#,
         node_version = config.node_version,
         app_dir = app_dir,
-        domain_block = if config.domain.is_empty() {
-            ":80".to_string()
+        domain_extra = if config.domain.is_empty() {
+            String::new()
         } else {
-            config.domain.clone()
+            format!("\n{domain} {{\n    root * $BUILD_DIR\n    file_server\n    encode gzip\n}}", domain = config.domain)
         },
     )
 }
@@ -439,6 +442,22 @@ echo "Docker Compose stack started"
 }
 
 fn caddy_setup(config: &ProvisioningConfig) -> String {
+    let caddyfile = if config.domain.is_empty() {
+        // No domain -- serve on port 80 only
+        format!(
+            ":80 {{\n    reverse_proxy localhost:{port}\n    encode gzip\n}}",
+            port = config.app_port,
+        )
+    } else {
+        // Domain configured -- serve on both :80 (IP access) and domain (auto-HTTPS when DNS is ready)
+        // Use on_demand TLS so Caddy doesn't fail if DNS isn't pointed yet
+        format!(
+            ":80 {{\n    reverse_proxy localhost:{port}\n    encode gzip\n}}\n\n{domain} {{\n    reverse_proxy localhost:{port}\n    encode gzip\n}}",
+            port = config.app_port,
+            domain = config.domain,
+        )
+    };
+
     format!(r#"# ---------- Caddy reverse proxy ----------
 # Install Caddy if not present
 if ! command -v caddy &>/dev/null; then
@@ -457,10 +476,7 @@ fi
 
 # Configure Caddyfile
 cat > /etc/caddy/Caddyfile <<'CADDYEOF'
-{domain_block} {{
-    reverse_proxy localhost:{port}
-    encode gzip
-}}
+{caddyfile}
 CADDYEOF
 
 systemctl enable caddy
@@ -469,12 +485,7 @@ systemctl restart caddy
 echo "Caddy configured"
 
 "#,
-        domain_block = if config.domain.is_empty() {
-            ":80".to_string()
-        } else {
-            config.domain.clone()
-        },
-        port = config.app_port,
+        caddyfile = caddyfile,
     )
 }
 
