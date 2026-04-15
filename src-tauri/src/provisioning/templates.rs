@@ -459,23 +459,26 @@ fn caddy_setup(config: &ProvisioningConfig) -> String {
     };
 
     format!(r#"# ---------- Caddy reverse proxy ----------
-# Install Caddy if not present
+# Install Caddy via direct binary download (most reliable across all distros)
 if ! command -v caddy &>/dev/null; then
-    if command -v apt-get &>/dev/null; then
-        apt-get install -y gpg debian-keyring debian-archive-keyring apt-transport-https curl
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg 2>/dev/null || true
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/deb/debian/config/deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list > /dev/null
-        apt-get update -y
-        apt-get install -y caddy || {{
-            # Fallback: download Caddy binary directly
-            echo "apt install failed, downloading Caddy binary directly"
-            curl -o /usr/local/bin/caddy -L "https://caddyserver.com/api/download?os=linux&arch=$(dpkg --print-architecture)"
-            chmod +x /usr/local/bin/caddy
-            # Create systemd service
-            caddy completion bash > /dev/null 2>&1 || true
-            groupadd --system caddy 2>/dev/null || true
-            useradd --system --gid caddy --create-home --home-dir /var/lib/caddy --shell /usr/sbin/nologin caddy 2>/dev/null || true
-            cat > /etc/systemd/system/caddy.service <<'SVCEOF'
+    CADDY_ARCH=$(dpkg --print-architecture 2>/dev/null || uname -m)
+    # Normalize architecture name
+    case "$CADDY_ARCH" in
+        aarch64) CADDY_ARCH="arm64" ;;
+        x86_64)  CADDY_ARCH="amd64" ;;
+    esac
+
+    echo "Installing Caddy for $CADDY_ARCH..."
+    curl -o /usr/local/bin/caddy -L "https://caddyserver.com/api/download?os=linux&arch=$CADDY_ARCH"
+    chmod +x /usr/local/bin/caddy
+    echo "Caddy version: $(/usr/local/bin/caddy version)"
+
+    # Create caddy user and group
+    groupadd --system caddy 2>/dev/null || true
+    useradd --system --gid caddy --create-home --home-dir /var/lib/caddy --shell /usr/sbin/nologin caddy 2>/dev/null || true
+
+    # Create systemd service
+    cat > /etc/systemd/system/caddy.service <<'SVCEOF'
 [Unit]
 Description=Caddy
 After=network.target network-online.target
@@ -493,13 +496,7 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE
 [Install]
 WantedBy=multi-user.target
 SVCEOF
-            systemctl daemon-reload
-        }}
-    else
-        dnf install -y 'dnf-command(copr)' || true
-        dnf copr enable @caddy/caddy -y || true
-        dnf install -y caddy
-    fi
+    systemctl daemon-reload
 fi
 mkdir -p /etc/caddy
 
