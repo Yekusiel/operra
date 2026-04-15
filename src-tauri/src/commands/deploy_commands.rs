@@ -113,16 +113,23 @@ CRITICAL -- Application Provisioning:
   6. Configure a reverse proxy (Caddy preferred -- auto-HTTPS, simpler than Nginx) on port 80/443
   7. The app should be accessible via HTTP immediately after provisioning
 - The user_data script should be a complete bash script, not a skeleton
-- For user_data with bash variables: use the templatestring() function with a quoted heredoc:
-    user_data = templatestring(<<-'SCRIPT'
-    #!/bin/bash
-    echo "Project: ${{project_name}}"
-    NORMAL_BASH_VAR=$(whoami)
-    SCRIPT
-    , {{ project_name = var.project_name }})
-  This way: ${{...}} is Terraform interpolation, $(...) and $VAR are normal bash
-- Do NOT use $$ for bash variables -- that creates literal $$ in the output
-- Do NOT use unquoted heredoc (<<-EOF) with bash $ signs -- Terraform will try to interpolate them and fail
+- For user_data, generate TWO separate files:
+  1. A setup.sh script file (=== FILE: setup.sh ===) containing the PURE BASH script with normal $ syntax
+  2. In main.tf, read and base64encode the script: user_data = base64encode(file("setup.sh"))
+- The setup.sh script should receive configuration via a separate config file written by Terraform:
+  In main.tf, create a local_file resource that writes a config.env file with Terraform variables,
+  then in the user_data just reference setup.sh which does NOT contain any Terraform interpolation
+- ACTUALLY the simplest approach: use a standard heredoc (<<-EOF) for user_data, but ONLY use
+  Terraform interpolation (${{var.name}}) for variable values. For bash constructs, avoid subshells entirely:
+  - Instead of VAR=$(command), write: command > /tmp/result && VAR=$(cat /tmp/result)
+  - Actually just avoid this complexity: hardcode ALL values using Terraform interpolation
+  - Write the user_data as a PURE Terraform-interpolated string with NO bash variables at all
+  - Every value the script needs should come from Terraform variables via ${{}} interpolation
+  - For bash loops or conditionals that need $, use a separate downloaded script approach
+- RECOMMENDED APPROACH: Put all bash logic in setup.sh, pass config via environment:
+  === FILE: setup.sh === (pure bash, no Terraform syntax)
+  === FILE: main.tf === user_data = base64encode(file("${{path.module}}/setup.sh"))
+  The setup.sh reads config from instance tags or SSM parameters instead of needing variables injected
 
 {domain_instructions}
 
@@ -245,8 +252,8 @@ fn write_iac_file(output_dir: &Path, filename: &str, content: &str) -> Result<()
         .filter(|c| c.is_alphanumeric() || *c == '.' || *c == '-' || *c == '_')
         .collect();
 
-    if safe_name.is_empty() || (!safe_name.ends_with(".tf") && !safe_name.ends_with(".tfvars")) {
-        return Ok(()); // Skip non-terraform files
+    if safe_name.is_empty() || (!safe_name.ends_with(".tf") && !safe_name.ends_with(".tfvars") && !safe_name.ends_with(".sh")) {
+        return Ok(()); // Skip non-terraform/non-script files
     }
 
     let path = output_dir.join(&safe_name);
