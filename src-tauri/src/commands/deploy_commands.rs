@@ -197,7 +197,7 @@ COMMON GOTCHAS TO AVOID:
         .map_err(|e| e.to_string())?;
 
     // Parse the response into IaC files
-    let infra_dir = PathBuf::from(&project.repo_path).join("infrastructure");
+    let infra_dir = resolve_infra_dir(&project);
     std::fs::create_dir_all(&infra_dir)
         .map_err(|e| format!("Failed to create infrastructure directory: {}", e))?;
 
@@ -218,6 +218,20 @@ COMMON GOTCHAS TO AVOID:
         output_dir: infra_dir.to_string_lossy().to_string(),
         files,
     })
+}
+
+/// Resolve the infrastructure directory for a project.
+/// For local projects: <repo_path>/infrastructure
+/// For GitHub projects: <cwd>/infrastructure (since there's no local repo path)
+fn resolve_infra_dir(project: &crate::models::project::Project) -> PathBuf {
+    if project.source_type == "github" || project.repo_path.is_empty() {
+        // Use current working directory for GitHub projects
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join("infrastructure")
+    } else {
+        resolve_infra_dir(&project)
+    }
 }
 
 fn parse_and_write_files(response: &str, output_dir: &Path) -> Result<Vec<String>, String> {
@@ -415,7 +429,7 @@ pub async fn run_tofu_plan(
             .ok_or("Project not found")?
     };
 
-    let infra_dir = PathBuf::from(&project.repo_path).join("infrastructure");
+    let infra_dir = resolve_infra_dir(&project);
     if !infra_dir.exists() {
         return Err("No infrastructure directory found. Generate IaC first.".to_string());
     }
@@ -502,7 +516,7 @@ pub async fn run_tofu_apply(
         (deployment, project)
     };
 
-    let infra_dir = PathBuf::from(&project.repo_path).join("infrastructure");
+    let infra_dir = resolve_infra_dir(&project);
     let apply_result = tofu::apply(&infra_dir).await?;
     let combined = format!("{}\n{}", apply_result.stdout, apply_result.stderr);
 
@@ -556,26 +570,7 @@ pub async fn destroy_infrastructure(
             .ok_or("Project not found")?
     };
 
-    // Find the infrastructure directory
-    let infra_dir = if project.source_type == "github" {
-        // For GitHub projects, check multiple possible locations
-        let exe_dir = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_default();
-        let candidate1 = exe_dir.join("infrastructure");
-        let candidate2 = PathBuf::from(&project.repo_path).join("infrastructure");
-        let candidate3 = PathBuf::from("src-tauri/infrastructure");
-        if candidate1.exists() {
-            candidate1
-        } else if candidate2.exists() {
-            candidate2
-        } else {
-            candidate3
-        }
-    } else {
-        PathBuf::from(&project.repo_path).join("infrastructure")
-    };
+    let infra_dir = resolve_infra_dir(&project);
 
     if !infra_dir.exists() {
         return Err("No infrastructure directory found. Nothing to destroy.".to_string());
@@ -643,7 +638,7 @@ pub async fn get_dns_instructions(
             _ => return Ok(None),
         };
 
-        let infra_dir = PathBuf::from(&project.repo_path).join("infrastructure");
+        let infra_dir = resolve_infra_dir(&project);
         (domain, infra_dir)
     };
 
@@ -712,7 +707,7 @@ pub async fn get_cicd_secrets(
             None => return Ok(None),
         };
 
-        let infra_dir = PathBuf::from(&project.repo_path).join("infrastructure");
+        let infra_dir = resolve_infra_dir(&project);
 
         (project, infra_dir)
     };
@@ -757,13 +752,7 @@ pub async fn get_deploy_key_info(
         let project = crate::models::project::Project::get_by_id(&conn, &project_id)
             .map_err(|e| e.to_string())?
             .ok_or("Project not found")?;
-        let infra_dir = if project.source_type == "github" {
-            // For GitHub projects, IaC is in operra's src-tauri/infrastructure
-            PathBuf::from(std::env::current_exe().unwrap_or_default().parent().unwrap_or(Path::new(".")).to_path_buf())
-                .join("infrastructure")
-        } else {
-            PathBuf::from(&project.repo_path).join("infrastructure")
-        };
+        let infra_dir = resolve_infra_dir(&project);
         (project, infra_dir)
     };
 
