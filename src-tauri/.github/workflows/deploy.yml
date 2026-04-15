@@ -1,4 +1,4 @@
-name: Deploy Givinity
+name: Deploy to Production
 
 on:
   push:
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy to production server
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -20,6 +20,6 @@ jobs:
             cd ~/givinity
             git fetch origin main
             git reset --hard origin/main
-            npm ci
+            npm install --production
             npm run build
-            pm2 restart givinity --update-env || pm2 start npm --name givinity -- start
+            pm2 restart givinity || pm2 start npm --name givinity -- start

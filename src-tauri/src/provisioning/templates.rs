@@ -462,17 +462,46 @@ fn caddy_setup(config: &ProvisioningConfig) -> String {
 # Install Caddy if not present
 if ! command -v caddy &>/dev/null; then
     if command -v apt-get &>/dev/null; then
-        apt-get install -y debian-keyring debian-archive-keyring apt-transport-https
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/deb/debian/config/deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
-        apt-get update
-        apt-get install -y caddy
+        apt-get install -y gpg debian-keyring debian-archive-keyring apt-transport-https curl
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg 2>/dev/null || true
+        curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/deb/debian/config/deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list > /dev/null
+        apt-get update -y
+        apt-get install -y caddy || {{
+            # Fallback: download Caddy binary directly
+            echo "apt install failed, downloading Caddy binary directly"
+            curl -o /usr/local/bin/caddy -L "https://caddyserver.com/api/download?os=linux&arch=$(dpkg --print-architecture)"
+            chmod +x /usr/local/bin/caddy
+            # Create systemd service
+            caddy completion bash > /dev/null 2>&1 || true
+            groupadd --system caddy 2>/dev/null || true
+            useradd --system --gid caddy --create-home --home-dir /var/lib/caddy --shell /usr/sbin/nologin caddy 2>/dev/null || true
+            cat > /etc/systemd/system/caddy.service <<'SVCEOF'
+[Unit]
+Description=Caddy
+After=network.target network-online.target
+Requires=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/caddy run --environ --config /etc/caddy/Caddyfile
+ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile
+TimeoutStopSec=5s
+LimitNOFILE=1048576
+PrivateTmp=true
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+            systemctl daemon-reload
+        }}
     else
-        dnf install -y 'dnf-command(copr)'
-        dnf copr enable @caddy/caddy -y
+        dnf install -y 'dnf-command(copr)' || true
+        dnf copr enable @caddy/caddy -y || true
         dnf install -y caddy
     fi
 fi
+mkdir -p /etc/caddy
 
 # Configure Caddyfile
 cat > /etc/caddy/Caddyfile <<'CADDYEOF'
