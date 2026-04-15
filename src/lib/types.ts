@@ -340,6 +340,7 @@ export interface AwsConnection {
 export interface IacGenerationResult {
   output_dir: string;
   files: string[];
+  deploy_key_public: string | null;
 }
 
 export interface Deployment {

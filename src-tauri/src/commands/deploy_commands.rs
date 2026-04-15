@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 pub struct IacGenerationResult {
     pub output_dir: String,
     pub files: Vec<String>,
+    pub deploy_key_public: Option<String>,
 }
 
 #[tauri::command]
@@ -207,8 +208,47 @@ COMMON GOTCHAS TO AVOID:
         return Err("AI did not generate any infrastructure files. Try regenerating.".to_string());
     }
 
-    // Generate CI/CD pipeline for GitHub source projects
+    // For GitHub projects: generate deploy key and CI/CD config
+    let mut deploy_key_public: Option<String> = None;
     if project.source_type == "github" {
+        // Generate deploy key using ssh-keygen
+        let key_path = infra_dir.join("deploy_key");
+        let _ = std::fs::remove_file(&key_path); // Remove if exists
+        let _ = std::fs::remove_file(key_path.with_extension("pub"));
+
+        let keygen_result = if cfg!(windows) {
+            tokio::process::Command::new("cmd")
+                .args(["/C", "ssh-keygen", "-t", "ed25519", "-f"])
+                .arg(key_path.to_string_lossy().as_ref())
+                .args(["-N", "", "-C", &format!("operra-deploy-{}", project.name)])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .output()
+                .await
+        } else {
+            tokio::process::Command::new("ssh-keygen")
+                .args(["-t", "ed25519", "-f"])
+                .arg(key_path.to_string_lossy().as_ref())
+                .args(["-N", "", "-C", &format!("operra-deploy-{}", project.name)])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .output()
+                .await
+        };
+
+        if let Ok(output) = keygen_result {
+            if output.status.success() {
+                // Read the public key
+                if let Ok(pub_key) = std::fs::read_to_string(key_path.with_extension("pub")) {
+                    deploy_key_public = Some(pub_key.trim().to_string());
+                    files.push("deploy_key".to_string());
+                    files.push("deploy_key.pub".to_string());
+                }
+            }
+        }
+
         if let Ok(cicd_file) = generate_cicd_config(&adapter, &project).await {
             files.push(cicd_file);
         }
@@ -217,6 +257,7 @@ COMMON GOTCHAS TO AVOID:
     Ok(IacGenerationResult {
         output_dir: infra_dir.to_string_lossy().to_string(),
         files,
+        deploy_key_public,
     })
 }
 

@@ -108,7 +108,16 @@ export function ProjectDetailPage() {
     setIacGenerating(true);
     setIacError(null);
     api.generateIac(id!, latestPlan.id)
-      .then((r) => setIacResult({ files: r.files, dir: r.output_dir }))
+      .then((r) => {
+        setIacResult({ files: r.files, dir: r.output_dir });
+        if (r.deploy_key_public) {
+          setDeployKeyInfo({
+            public_key: r.deploy_key_public,
+            github_url: `https://github.com/${project?.github_repo}/settings/keys/new`,
+            instructions: "",
+          });
+        }
+      })
       .catch((e) => setIacError(String(e)))
       .finally(() => setIacGenerating(false));
   };
@@ -504,17 +513,7 @@ export function ProjectDetailPage() {
                 </div>
               )}
 
-              {/* Deploy Key (show after IaC generation for GitHub projects) */}
-              {hasIac && project.source_type === "github" && !deployKeyInfo && (
-                <div className="ml-12">
-                  <button
-                    className="btn-secondary text-xs w-full justify-center"
-                    onClick={() => api.getDeployKeyInfo(id!).then(setDeployKeyInfo)}
-                  >
-                    Show Deploy Key (required for private repos)
-                  </button>
-                </div>
-              )}
+              {/* Deploy Key (shown automatically after IaC generation for GitHub projects) */}
               {deployKeyInfo && (
                 <div className="ml-12 rounded-lg border border-orange-200 bg-orange-50 p-4">
                   <h4 className="text-xs font-semibold text-orange-900 mb-1">

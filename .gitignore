@@ -22,4 +22,6 @@ Thumbs.db
 # Tauri
 src-tauri/gen/
 infrastructure/
+deploy_key
+deploy_key.pub
 .github/workflows/deploy.yml
