@@ -324,13 +324,23 @@ fn write_iac_file(output_dir: &Path, filename: &str, content: &str) -> Result<()
     let path = output_dir.join(&safe_name);
     // Strip markdown code fences the AI might wrap content in
     let trimmed = content.trim();
-    let cleaned = trimmed
-        .trim_start_matches("```hcl")
-        .trim_start_matches("```terraform")
-        .trim_start_matches("```tf")
-        .trim_start_matches("```")
-        .trim_end_matches("```")
-        .trim();
+    let cleaned_owned: String;
+    let cleaned = if trimmed.starts_with("```") {
+        // Remove the entire first line (```bash, ```hcl, etc.) and trailing ```
+        cleaned_owned = trimmed
+            .lines()
+            .skip(1) // Skip the opening ``` line entirely
+            .collect::<Vec<_>>()
+            .join("\n");
+        let c = cleaned_owned.trim();
+        if c.ends_with("```") {
+            c[..c.len() - 3].trim()
+        } else {
+            c
+        }
+    } else {
+        trimmed
+    };
     if !cleaned.is_empty() {
         std::fs::write(&path, cleaned)
             .map_err(|e| format!("Failed to write {}: {}", safe_name, e))?;

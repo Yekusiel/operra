@@ -8,6 +8,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
@@ -20,4 +21,4 @@ jobs:
             git pull origin main
             npm ci
             npm run build
-            pm2 restart givinity || pm2 start npm --name "givinity" -- start
+            pm2 restart givinity || pm2 start npm --name givinity -- start
