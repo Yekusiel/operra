@@ -250,9 +250,17 @@ fn write_iac_file(output_dir: &Path, filename: &str, content: &str) -> Result<()
     }
 
     let path = output_dir.join(&safe_name);
+    // Strip markdown code fences the AI might wrap content in
     let trimmed = content.trim();
-    if !trimmed.is_empty() {
-        std::fs::write(&path, trimmed)
+    let cleaned = trimmed
+        .trim_start_matches("```hcl")
+        .trim_start_matches("```terraform")
+        .trim_start_matches("```tf")
+        .trim_start_matches("```")
+        .trim_end_matches("```")
+        .trim();
+    if !cleaned.is_empty() {
+        std::fs::write(&path, cleaned)
             .map_err(|e| format!("Failed to write {}: {}", safe_name, e))?;
     }
     Ok(())
