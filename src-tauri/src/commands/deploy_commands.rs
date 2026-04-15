@@ -162,7 +162,8 @@ COMMON GOTCHAS TO AVOID:
 - Do NOT use placeholder values like "CHANGEME" -- use real working defaults or omit
 - For SSH key pairs: use tls_private_key resource + aws_key_pair (let Terraform generate the key)
 - For passwords: use random_password resource from the random provider
-- Include outputs for: app_url, ssh_command, static_ip, ssh_user (the SSH username, e.g., "ec2-user" for Amazon Linux, "ubuntu" for Ubuntu), ssh_private_key (sensitive), github_deploy_key_public, and any credentials (sensitive)
+- Include outputs for: app_url, ssh_command, static_ip, ssh_user (the SSH username, e.g., "ec2-user" for Amazon Linux, "ubuntu" for Ubuntu), ssh_private_key (sensitive), and any credentials (sensitive)
+- Do NOT output the deploy key public key -- it is managed outside Terraform
 - Mark sensitive outputs with sensitive = true
 - Do NOT include any markdown formatting or text outside the === FILE: === blocks
 "#,
@@ -176,15 +177,18 @@ COMMON GOTCHAS TO AVOID:
         clone_instruction = if project.source_type == "github" {
             format!(
                 r#"Clones the repo from GitHub (may be private). The IaC MUST:
-  a. Create a tls_private_key resource named "deploy_key" (ED25519) for GitHub deploy key access
-  b. Store the private key in SSM Parameter Store at /{name}/deploy-key
-  c. Output the PUBLIC key as "github_deploy_key_public" so the user can add it to GitHub
+  a. A deploy key file already exists at deploy_key (private) and deploy_key.pub (public) in the infrastructure directory.
+     Do NOT create a tls_private_key for the deploy key -- the key is pre-generated.
+  b. Read the existing private key file and store it in SSM: use file("deploy_key") to read the key content
+     Store in SSM Parameter Store at /{name}/deploy-key as a SecureString
+  c. Do NOT output the public key -- it is already handled outside of Terraform
   d. In setup.sh, retrieve the deploy key from SSM, write it to ~/.ssh/deploy_key, configure SSH:
-     - aws ssm get-parameter --name "/{name}/deploy-key" --with-decryption --query Parameter.Value --output text > /root/.ssh/deploy_key
+     - aws ssm get-parameter --name "/{name}/deploy-key" --with-decryption --query Parameter.Value --output text --region REGION > /root/.ssh/deploy_key
      - chmod 600 /root/.ssh/deploy_key
      - Create /root/.ssh/config with: Host github.com / IdentityFile /root/.ssh/deploy_key / StrictHostKeyChecking no
   e. Clone via SSH: git clone --branch {branch} git@github.com:{repo}.git /opt/{name}
-  f. IMPORTANT: clone using git@github.com: (SSH), NOT https://github.com/"#,
+  f. IMPORTANT: clone using git@github.com: (SSH), NOT https://github.com/
+  g. The deploy key SSM parameter MUST be created BEFORE the EC2 instance (use depends_on if needed)"#,
                 name = project.name,
                 repo = project.github_repo.as_deref().unwrap_or(""),
                 branch = project.github_branch.as_deref().unwrap_or("main"),
