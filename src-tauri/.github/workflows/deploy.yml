@@ -1,16 +1,15 @@
-name: Deploy to Production
+Based on the exploration, the givinity server is a Node.js app deployed with pm2. Here's the workflow:
 
+name: Deploy Givinity
 on:
   push:
     branches:
       - main
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Deploy via SSH
+      - name: Deploy to production server
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -22,4 +21,4 @@ jobs:
             git reset --hard origin/main
             npm install --production
             npm run build
-            pm2 restart givinity || pm2 start npm --name givinity -- start
+            pm2 restart givinity || pm2 start npm --name "givinity" -- start

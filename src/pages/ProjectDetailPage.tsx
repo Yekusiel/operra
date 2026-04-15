@@ -77,16 +77,30 @@ export function ProjectDetailPage() {
   const hasPlanApproved = !!approvedPlan;
   const hasIac = !!iacResult;
 
-  // Load persisted state on mount
+  // Load persisted state on mount + poll for in-progress deployments
   useEffect(() => {
     if (!id) return;
-    api.listDeployments(id).then((deps) => {
-      if (deps.length > 0) {
-        setDeployment(deps[0]);
-      }
-    });
+
+    const loadDeployment = () => {
+      api.listDeployments(id).then((deps) => {
+        if (deps.length > 0) {
+          setDeployment(deps[0]);
+        }
+      });
+    };
+
+    loadDeployment();
     api.getAwsConnection(id).then(setAwsConn);
-  }, [id]);
+
+    // Poll every 5s while a deployment is in progress
+    const interval = setInterval(() => {
+      if (deployment && ["planning", "approved", "applying"].includes(deployment.status)) {
+        loadDeployment();
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [id, deployment?.status]);
 
   // Restore IaC generated state from deployment history
   useEffect(() => {
