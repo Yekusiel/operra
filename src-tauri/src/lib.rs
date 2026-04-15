@@ -2,6 +2,7 @@ mod adapters;
 mod commands;
 mod db;
 mod models;
+mod provisioning;
 mod scanner;
 mod tools;
 

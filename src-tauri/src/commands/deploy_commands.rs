@@ -2,7 +2,9 @@ use crate::db::AppDb;
 use crate::models::deployment::Deployment;
 use crate::models::plan::Plan;
 use crate::models::plan_option::PlanOption;
+use crate::models::scan::{Scan, ScanFinding};
 use crate::adapters::claude::ClaudeCliAdapter;
+use crate::provisioning;
 use crate::tools::aws_resources;
 use crate::tools::tofu;
 use std::path::{Path, PathBuf};
@@ -47,6 +49,20 @@ pub async fn generate_iac(
 
         (plan, approved_option, project)
     };
+
+    // Get scan findings to detect stack type
+    let scan_findings = {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        let scans = Scan::list_for_project(&conn, &project_id).map_err(|e| e.to_string())?;
+        let latest_scan = scans.iter().find(|s| s.status == "completed");
+        if let Some(scan) = latest_scan {
+            ScanFinding::list_for_scan(&conn, &scan.id).map_err(|e| e.to_string())?
+        } else {
+            Vec::new()
+        }
+    };
+
+    let stack_type = provisioning::detect_stack_type(&scan_findings);
 
     // Use the approved option's content if available, otherwise fall back to full plan
     let plan_markdown = if let Some(ref opt) = approved_option {
@@ -111,37 +127,20 @@ Output ONLY the file contents in this exact format for each file:
 === FILE: terraform.tfvars ===
 <variable values>
 
-CRITICAL -- Application Provisioning:
-- The instance user_data MUST be an INLINE heredoc string in the .tf file (<<-EOF ... EOF)
-- Do NOT use templatefile() or reference external .tftpl files -- everything must be self-contained in the .tf files
-- The user_data script MUST:
-  1. Install required runtime (Node.js, Docker, etc.) based on the project type
-  2. {clone_instruction}
-  3. Install dependencies (npm install, pip install, etc.)
-  4. Build the application if needed (npm run build, etc.)
-  5. Set up a process manager (PM2 for Node.js, systemd for others) to keep the app running
-  6. Configure a reverse proxy (Caddy preferred -- auto-HTTPS, simpler than Nginx) on port 80/443
-  7. The app should be accessible via HTTP immediately after provisioning
-- The user_data script should be a complete bash script, not a skeleton
-- For user_data, generate TWO separate files:
-  1. A setup.sh script file (=== FILE: setup.sh ===) containing the PURE BASH script with normal $ syntax
-  2. In main.tf, read and base64encode the script: user_data = base64encode(file("setup.sh"))
-- The setup.sh script should receive configuration via a separate config file written by Terraform:
-  In main.tf, create a local_file resource that writes a config.env file with Terraform variables,
-  then in the user_data just reference setup.sh which does NOT contain any Terraform interpolation
-- ACTUALLY the simplest approach: use a standard heredoc (<<-EOF) for user_data, but ONLY use
-  Terraform interpolation (${{var.name}}) for variable values. For bash constructs, avoid subshells entirely:
-  - Instead of VAR=$(command), write: command > /tmp/result && VAR=$(cat /tmp/result)
-  - Actually just avoid this complexity: hardcode ALL values using Terraform interpolation
-  - Write the user_data as a PURE Terraform-interpolated string with NO bash variables at all
-  - Every value the script needs should come from Terraform variables via ${{}} interpolation
-  - For bash loops or conditionals that need $, use a separate downloaded script approach
-- RECOMMENDED APPROACH: Put all bash logic in setup.sh, pass config via environment:
-  === FILE: setup.sh === (pure bash, no Terraform syntax)
-  === FILE: main.tf === user_data = base64encode(file("${{path.module}}/setup.sh"))
-  The setup.sh reads config from instance tags or SSM parameters instead of needing variables injected
+CRITICAL -- Provisioning (setup.sh):
+- A setup.sh file ALREADY EXISTS in the infrastructure directory. It is pre-generated and tested.
+- Do NOT generate a setup.sh file. Do NOT include provisioning logic in user_data.
+- In main.tf, set: user_data = file("${{path.module}}/setup.sh")
+- That's it. The setup.sh handles everything: Docker, Node.js, cloning, building, Caddy, PM2.
+
+{clone_instruction}
 
 {domain_instructions}
+
+AMI Requirements:
+- MUST use Ubuntu 22.04 or 24.04 LTS (the setup.sh is written for apt-based systems)
+- Use data.aws_ami to find the latest Ubuntu AMI for the correct architecture
+- The SSH user for Ubuntu AMIs is "ubuntu" -- output this as ssh_user
 
 COMMON GOTCHAS TO AVOID:
 - ONLY use resource types from the Valid AWS Resource Types list above -- no exceptions
@@ -162,8 +161,10 @@ COMMON GOTCHAS TO AVOID:
 - Do NOT use placeholder values like "CHANGEME" -- use real working defaults or omit
 - For SSH key pairs: use tls_private_key resource + aws_key_pair (let Terraform generate the key)
 - For passwords: use random_password resource from the random provider
-- Include outputs for: app_url, ssh_command, static_ip, ssh_user (the SSH username, e.g., "ec2-user" for Amazon Linux, "ubuntu" for Ubuntu), ssh_private_key (sensitive), and any credentials (sensitive)
+- Include outputs for: app_url, ssh_command, static_ip, ssh_private_key (sensitive), and any credentials (sensitive)
+- Include output: ssh_user = "ubuntu" (hardcoded -- we always use Ubuntu AMIs)
 - Do NOT output the deploy key public key -- it is managed outside Terraform
+- Do NOT generate a setup.sh file -- it already exists
 - Mark sensitive outputs with sensitive = true
 - Do NOT include any markdown formatting or text outside the === FILE: === blocks
 "#,
@@ -220,6 +221,31 @@ COMMON GOTCHAS TO AVOID:
     if files.is_empty() {
         return Err("AI did not generate any infrastructure files. Try regenerating.".to_string());
     }
+
+    // Generate setup.sh from TEMPLATE (not AI) -- deterministic and tested
+    let prov_config = provisioning::ProvisioningConfig {
+        project_name: project.name.clone(),
+        source_type: project.source_type.clone(),
+        github_repo: project.github_repo.clone().unwrap_or_default(),
+        github_branch: project.github_branch.clone().unwrap_or_else(|| "main".to_string()),
+        domain: project.domain.clone().unwrap_or_default(),
+        aws_region: project.aws_region.clone(),
+        db_name: project.name.clone(),
+        db_user: project.name.clone(),
+        ssh_user: "ubuntu".to_string(), // We force Ubuntu AMI in the prompt
+        app_port: 3000,
+        node_version: "20".to_string(),
+        stack_type: stack_type.as_str().to_string(),
+        has_docker_compose: scan_findings.iter().any(|f| f.name == "Docker Compose"),
+        has_prisma: scan_findings.iter().any(|f| f.name == "Prisma ORM" || f.name == "PostgreSQL"),
+        deploy_key_ssm_path: format!("/{}/deploy-key", project.name),
+    };
+
+    let setup_script = provisioning::templates::generate_setup_script(&prov_config);
+    let setup_path = infra_dir.join("setup.sh");
+    std::fs::write(&setup_path, &setup_script)
+        .map_err(|e| format!("Failed to write setup.sh: {}", e))?;
+    files.push("setup.sh".to_string());
 
     // For GitHub projects: generate deploy key and CI/CD config
     let mut deploy_key_public: Option<String> = None;
