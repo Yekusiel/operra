@@ -361,6 +361,13 @@ export interface Deployment {
   created_at: string;
 }
 
+// ── Destroy ──
+
+export interface DestroyResult {
+  success: boolean;
+  output: string;
+}
+
 // ── Deploy Key ──
 
 export interface DeployKeyInfo {

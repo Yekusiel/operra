@@ -16,6 +16,7 @@ import type {
   AwsConnection,
   IacGenerationResult,
   Deployment,
+  DestroyResult,
   DeployKeyInfo,
   DnsInstructions,
   CiCdSecrets,
@@ -151,6 +152,9 @@ export const listDeployments = (projectId: string) =>
   invoke<Deployment[]>("list_deployments", { projectId });
 
 // ── DNS ──
+
+export const destroyInfrastructure = (projectId: string) =>
+  invoke<DestroyResult>("destroy_infrastructure", { projectId });
 
 export const getDeployKeyInfo = (projectId: string) =>
   invoke<DeployKeyInfo | null>("get_deploy_key_info", { projectId });

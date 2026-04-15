@@ -63,6 +63,8 @@ export function ProjectDetailPage() {
   const [dnsInfo, setDnsInfo] = useState<import("../lib/types").DnsInstructions | null>(null);
   const [cicdSecrets, setCicdSecrets] = useState<import("../lib/types").CiCdSecrets | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [destroying, setDestroying] = useState(false);
+  const [destroyResult, setDestroyResult] = useState<import("../lib/types").DestroyResult | null>(null);
 
   const [workflowOpen, setWorkflowOpen] = useState(true);
 
@@ -774,6 +776,54 @@ export function ProjectDetailPage() {
                   <pre className="mt-1.5 rounded bg-gray-900 p-2 text-[10px] text-red-400 overflow-x-auto max-h-[300px] overflow-y-auto">
                     {deployment.error_msg}
                   </pre>
+                </div>
+              )}
+
+              {/* Destroy Infrastructure */}
+              {(deployment?.status === "completed" || deployment?.status === "failed") && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <button
+                    className="btn-danger w-full justify-center py-2.5 text-xs"
+                    onClick={() => {
+                      if (window.confirm("Destroy all infrastructure for this project? This will terminate servers, delete resources, and cannot be undone.")) {
+                        setDestroying(true);
+                        setDestroyResult(null);
+                        api.destroyInfrastructure(id!)
+                          .then((result) => {
+                            setDestroyResult(result);
+                            if (result.success) {
+                              setDeployment(null);
+                              setIacResult(null);
+                            }
+                          })
+                          .catch((e) => setDestroyResult({ success: false, output: String(e) }))
+                          .finally(() => setDestroying(false));
+                      }
+                    }}
+                    disabled={destroying}
+                  >
+                    {destroying ? (
+                      <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Destroying infrastructure...</>
+                    ) : (
+                      <><Trash2 className="h-3.5 w-3.5" /> Destroy Infrastructure</>
+                    )}
+                  </button>
+
+                  {destroyResult && (
+                    <div className={`mt-3 rounded-lg border p-3 ${destroyResult.success ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}>
+                      <p className={`text-xs font-medium ${destroyResult.success ? "text-green-800" : "text-red-800"}`}>
+                        {destroyResult.success ? "Infrastructure destroyed successfully" : "Destroy failed"}
+                      </p>
+                      <details className="mt-1.5">
+                        <summary className={`text-[10px] cursor-pointer ${destroyResult.success ? "text-green-700" : "text-red-700"}`}>
+                          Output
+                        </summary>
+                        <pre className="mt-1.5 rounded bg-gray-900 p-2 text-[10px] text-green-400 overflow-x-auto max-h-[300px] overflow-y-auto">
+                          {destroyResult.output}
+                        </pre>
+                      </details>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

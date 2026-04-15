@@ -539,6 +539,86 @@ pub async fn list_deployments(
 }
 
 #[derive(serde::Serialize)]
+pub struct DestroyResult {
+    pub success: bool,
+    pub output: String,
+}
+
+#[tauri::command]
+pub async fn destroy_infrastructure(
+    state: tauri::State<'_, AppDb>,
+    project_id: String,
+) -> Result<DestroyResult, String> {
+    let project = {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        crate::models::project::Project::get_by_id(&conn, &project_id)
+            .map_err(|e| e.to_string())?
+            .ok_or("Project not found")?
+    };
+
+    // Find the infrastructure directory
+    let infra_dir = if project.source_type == "github" {
+        // For GitHub projects, check multiple possible locations
+        let exe_dir = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+            .unwrap_or_default();
+        let candidate1 = exe_dir.join("infrastructure");
+        let candidate2 = PathBuf::from(&project.repo_path).join("infrastructure");
+        let candidate3 = PathBuf::from("src-tauri/infrastructure");
+        if candidate1.exists() {
+            candidate1
+        } else if candidate2.exists() {
+            candidate2
+        } else {
+            candidate3
+        }
+    } else {
+        PathBuf::from(&project.repo_path).join("infrastructure")
+    };
+
+    if !infra_dir.exists() {
+        return Err("No infrastructure directory found. Nothing to destroy.".to_string());
+    }
+
+    // Check if there's a state file with resources
+    let state_file = infra_dir.join("terraform.tfstate");
+    if state_file.exists() {
+        let content = std::fs::read_to_string(&state_file).unwrap_or_default();
+        if content.contains("\"resources\":[]") || content.contains("\"resources\": []") {
+            return Ok(DestroyResult {
+                success: true,
+                output: "No resources to destroy. Infrastructure is already clean.".to_string(),
+            });
+        }
+    }
+
+    // Run tofu init first
+    let init_result = tofu::init(&infra_dir).await?;
+    if !init_result.success {
+        return Err(format!("tofu init failed:\n{}\n{}", init_result.stdout, init_result.stderr));
+    }
+
+    // Run tofu destroy
+    let destroy_result = tofu::destroy(&infra_dir).await?;
+    let combined = format!("{}\n{}", destroy_result.stdout, destroy_result.stderr);
+
+    if destroy_result.success {
+        // Record the destruction in the deployment history
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        let dep = Deployment::create(&conn, &project_id, None, "destroy")
+            .map_err(|e| e.to_string())?;
+        Deployment::complete(&conn, &dep.id, &combined, None)
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(DestroyResult {
+        success: destroy_result.success,
+        output: combined,
+    })
+}
+
+#[derive(serde::Serialize)]
 pub struct DnsInstructions {
     pub domain: String,
     pub record_type: String,
