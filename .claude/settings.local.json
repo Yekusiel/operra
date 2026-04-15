@@ -15,7 +15,11 @@
       "Read(//c/Users/yekus/givinity/**)",
       "Bash(node -e ':*)",
       "Bash(\"C:/Program Files/Amazon/AWSCLIV2/aws.exe\" ec2 describe-instances --instance-ids i-00a95d92cc64d4875 --query \"Reservations[].Instances[].{KeyName:KeyName,ImageId:ImageId,Platform:PlatformDetails}\" --output table --region us-east-2)",
-      "Bash(\"C:/Program Files/Amazon/AWSCLIV2/aws.exe\" ec2 describe-images --image-ids ami-0552ed83caf3e6be5 --query \"Images[].{Name:Name,Desc:Description}\" --output text --region us-east-2)"
+      "Bash(\"C:/Program Files/Amazon/AWSCLIV2/aws.exe\" ec2 describe-images --image-ids ami-0552ed83caf3e6be5 --query \"Images[].{Name:Name,Desc:Description}\" --output text --region us-east-2)",
+      "Bash(\"C:/Program Files/Amazon/AWSCLIV2/aws.exe\" ec2 describe-instances --filters \"Name=tag:Project,Values=givinity\" \"Name=instance-state-name,Values=running\" --query \"Reservations[].Instances[].{ID:InstanceId,IP:PublicIpAddress,Type:InstanceType,LaunchTime:LaunchTime}\" --output table --region us-east-2)",
+      "Bash(curl -s -o /dev/null -w \"Port 80: HTTP %{http_code}\\\\n\" http://18.190.59.24 --connect-timeout 10)",
+      "Bash(curl -s -o /dev/null -w \"Port 3000: HTTP %{http_code}\\\\n\" http://18.190.59.24:3000 --connect-timeout 10)",
+      "Bash(curl -s -o /dev/null -w \"Port 443: HTTP %{http_code}\\\\n\" https://18.190.59.24 --connect-timeout 10 -k)"
     ]
   }
 }

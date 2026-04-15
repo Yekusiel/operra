@@ -361,6 +361,14 @@ export interface Deployment {
   created_at: string;
 }
 
+// ── Deploy Key ──
+
+export interface DeployKeyInfo {
+  public_key: string;
+  github_url: string;
+  instructions: string;
+}
+
 // ── CI/CD ──
 
 export interface CiCdSecrets {

@@ -59,6 +59,7 @@ export function ProjectDetailPage() {
   const [planError, setPlanError] = useState<string | null>(null);
   const [deployError, setDeployError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+  const [deployKeyInfo, setDeployKeyInfo] = useState<import("../lib/types").DeployKeyInfo | null>(null);
   const [dnsInfo, setDnsInfo] = useState<import("../lib/types").DnsInstructions | null>(null);
   const [cicdSecrets, setCicdSecrets] = useState<import("../lib/types").CiCdSecrets | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -497,6 +498,54 @@ export function ProjectDetailPage() {
                       <span key={f} className="badge-green font-mono text-[10px]">{f}</span>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Deploy Key (show after IaC generation for GitHub projects) */}
+              {hasIac && project.source_type === "github" && !deployKeyInfo && (
+                <div className="ml-12">
+                  <button
+                    className="btn-secondary text-xs w-full justify-center"
+                    onClick={() => api.getDeployKeyInfo(id!).then(setDeployKeyInfo)}
+                  >
+                    Show Deploy Key (required for private repos)
+                  </button>
+                </div>
+              )}
+              {deployKeyInfo && (
+                <div className="ml-12 rounded-lg border border-orange-200 bg-orange-50 p-4">
+                  <h4 className="text-xs font-semibold text-orange-900 mb-1">
+                    GitHub Deploy Key Setup
+                  </h4>
+                  <p className="text-[10px] text-orange-700 mb-3">
+                    Add this key to your GitHub repo before deploying so the server can clone your code.
+                  </p>
+                  <a
+                    href={deployKeyInfo.github_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-orange-700 underline hover:text-orange-900 block mb-2"
+                  >
+                    Add deploy key on GitHub
+                  </a>
+                  <div className="flex items-start gap-2 rounded bg-white border border-orange-100 px-3 py-2">
+                    <pre className="text-[10px] text-gray-700 font-mono flex-1 overflow-x-auto whitespace-pre-wrap break-all">
+                      {deployKeyInfo.public_key}
+                    </pre>
+                    <button
+                      className="text-[10px] text-orange-600 hover:text-orange-800 font-medium shrink-0"
+                      onClick={() => {
+                        navigator.clipboard.writeText(deployKeyInfo.public_key);
+                        setCopiedField("deploy_key");
+                        setTimeout(() => setCopiedField(null), 2000);
+                      }}
+                    >
+                      {copiedField === "deploy_key" ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-orange-600 mt-2">
+                    Title it "Operra Deploy Key" on GitHub. Read-only access is sufficient.
+                  </p>
                 </div>
               )}
 

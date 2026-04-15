@@ -152,7 +152,7 @@ COMMON GOTCHAS TO AVOID:
 - Do NOT use placeholder values like "CHANGEME" -- use real working defaults or omit
 - For SSH key pairs: use tls_private_key resource + aws_key_pair (let Terraform generate the key)
 - For passwords: use random_password resource from the random provider
-- Include outputs for: app_url, ssh_command, static_ip, ssh_private_key (sensitive), and any credentials (sensitive)
+- Include outputs for: app_url, ssh_command, static_ip, ssh_private_key (sensitive), github_deploy_key_public, and any credentials (sensitive)
 - Mark sensitive outputs with sensitive = true
 - Do NOT include any markdown formatting or text outside the === FILE: === blocks
 "#,
@@ -165,9 +165,19 @@ COMMON GOTCHAS TO AVOID:
         resources = valid_resources,
         clone_instruction = if project.source_type == "github" {
             format!(
-                "Clones the repo from https://github.com/{}.git (branch: {})",
-                project.github_repo.as_deref().unwrap_or(""),
-                project.github_branch.as_deref().unwrap_or("main"),
+                r#"Clones the repo from GitHub (may be private). The IaC MUST:
+  a. Create a tls_private_key resource named "deploy_key" (ED25519) for GitHub deploy key access
+  b. Store the private key in SSM Parameter Store at /{name}/deploy-key
+  c. Output the PUBLIC key as "github_deploy_key_public" so the user can add it to GitHub
+  d. In setup.sh, retrieve the deploy key from SSM, write it to ~/.ssh/deploy_key, configure SSH:
+     - aws ssm get-parameter --name "/{name}/deploy-key" --with-decryption --query Parameter.Value --output text > /root/.ssh/deploy_key
+     - chmod 600 /root/.ssh/deploy_key
+     - Create /root/.ssh/config with: Host github.com / IdentityFile /root/.ssh/deploy_key / StrictHostKeyChecking no
+  e. Clone via SSH: git clone --branch {branch} git@github.com:{repo}.git /opt/{name}
+  f. IMPORTANT: clone using git@github.com: (SSH), NOT https://github.com/"#,
+                name = project.name,
+                repo = project.github_repo.as_deref().unwrap_or(""),
+                branch = project.github_branch.as_deref().unwrap_or("main"),
             )
         } else {
             "Receives the application code (for local projects, the code will be pushed separately)".to_string()
@@ -648,6 +658,77 @@ pub async fn get_cicd_secrets(
         ssh_private_key: ssh_key,
         branch: project.github_branch.unwrap_or_else(|| "main".to_string()),
     }))
+}
+
+#[derive(serde::Serialize)]
+pub struct DeployKeyInfo {
+    pub public_key: String,
+    pub github_url: String,
+    pub instructions: String,
+}
+
+#[tauri::command]
+pub async fn get_deploy_key_info(
+    state: tauri::State<'_, AppDb>,
+    project_id: String,
+) -> Result<Option<DeployKeyInfo>, String> {
+    let (project, infra_dir) = {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        let project = crate::models::project::Project::get_by_id(&conn, &project_id)
+            .map_err(|e| e.to_string())?
+            .ok_or("Project not found")?;
+        let infra_dir = if project.source_type == "github" {
+            // For GitHub projects, IaC is in operra's src-tauri/infrastructure
+            PathBuf::from(std::env::current_exe().unwrap_or_default().parent().unwrap_or(Path::new(".")).to_path_buf())
+                .join("infrastructure")
+        } else {
+            PathBuf::from(&project.repo_path).join("infrastructure")
+        };
+        (project, infra_dir)
+    };
+
+    let github_repo = match project.github_repo.as_deref() {
+        Some(r) if !r.is_empty() => r.to_string(),
+        _ => return Ok(None),
+    };
+
+    // Try to get the deploy key public key from tofu output
+    let public_key = get_tofu_output_sensitive(&infra_dir, "github_deploy_key_public").await
+        .or_else(|_| {
+            // Also try from the state file directly
+            let state_path = infra_dir.join("terraform.tfstate");
+            if state_path.exists() {
+                let content = std::fs::read_to_string(&state_path).map_err(|e| e.to_string())?;
+                let state: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+                state.get("outputs")
+                    .and_then(|o| o.get("github_deploy_key_public"))
+                    .and_then(|v| v.get("value"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .ok_or_else(|| "Deploy key not found in outputs".to_string())
+            } else {
+                Err("No state file".to_string())
+            }
+        });
+
+    match public_key {
+        Ok(key) => Ok(Some(DeployKeyInfo {
+            public_key: key.trim().to_string(),
+            github_url: format!("https://github.com/{}/settings/keys/new", github_repo),
+            instructions: format!(
+                "Add this as a deploy key to your GitHub repository:\n\n\
+                 1. Go to github.com/{}/settings/keys\n\
+                 2. Click 'Add deploy key'\n\
+                 3. Title: Operra Deploy Key\n\
+                 4. Paste the key below\n\
+                 5. Check 'Allow write access' if you need the server to push\n\
+                 6. Click 'Add key'\n\n\
+                 The server will use this key to clone your private repository.",
+                github_repo,
+            ),
+        })),
+        Err(_) => Ok(None),
+    }
 }
 
 fn extract_output_value(output: &str, key: &str) -> Option<String> {
