@@ -113,24 +113,40 @@ CRITICAL -- Application Provisioning:
   6. Configure a reverse proxy (Caddy preferred -- auto-HTTPS, simpler than Nginx) on port 80/443
   7. The app should be accessible via HTTP immediately after provisioning
 - The user_data script should be a complete bash script, not a skeleton
-- For user_data, use a quoted heredoc to prevent Terraform interpolation: user_data = <<-'USERDATA' ... USERDATA
-- Inside the quoted heredoc, use normal bash syntax with single $ signs (NOT $$)
-- If you need to pass Terraform variables into the script, use templatestring() or set them as environment variables via a separate mechanism (e.g., write a config file from Terraform, then source it in the script)
-- Alternatively, use a simple approach: hardcode values directly in the script using Terraform interpolation OUTSIDE the heredoc, then concatenate
+- For user_data with bash variables: use the templatestring() function with a quoted heredoc:
+    user_data = templatestring(<<-'SCRIPT'
+    #!/bin/bash
+    echo "Project: ${{project_name}}"
+    NORMAL_BASH_VAR=$(whoami)
+    SCRIPT
+    , {{ project_name = var.project_name }})
+  This way: ${{...}} is Terraform interpolation, $(...) and $VAR are normal bash
+- Do NOT use $$ for bash variables -- that creates literal $$ in the output
+- Do NOT use unquoted heredoc (<<-EOF) with bash $ signs -- Terraform will try to interpolate them and fail
 
 {domain_instructions}
 
-Other Rules:
+COMMON GOTCHAS TO AVOID:
 - ONLY use resource types from the Valid AWS Resource Types list above -- no exceptions
-- For aws_s3_bucket_lifecycle_configuration: every rule block MUST include a filter block (use filter {} for apply-to-all)
+- For aws_s3_bucket_lifecycle_configuration: every rule block MUST include a filter block (use filter {{}} for apply-to-all)
+- AMI IDs are REGION-SPECIFIC. Use a data source (data.aws_ami) to look up the correct AMI dynamically, never hardcode AMI IDs
+- For ARM instances (t4g.*): filter AMI by architecture "arm64". For x86 (t3.*): use "x86_64"
+- If using Docker on ARM (t4g): ensure all Docker images support linux/arm64 (most official images do, but verify)
+- IAM instance profile: if the script uses aws cli commands (SSM, S3), the instance MUST have an IAM role with the right permissions attached via aws_iam_instance_profile
+- SSM parameters referenced in user_data MUST be created as Terraform resources BEFORE the instance, so they exist when the script runs. Use depends_on if needed
+- Security groups: do NOT create circular references. Define ingress/egress inline or use separate aws_vpc_security_group_ingress_rule resources
+- Default VPC: do NOT assume a default VPC exists. Create a VPC, subnet, internet gateway, and route table explicitly
+- user_data size limit: AWS limits user_data to 16 KB. If the script is long, download a setup script from S3 instead
+- Elastic IPs cost money ($3.60/month) when NOT attached to a running instance. Always attach immediately
 - Pin the AWS provider to a specific version (e.g., ~> 5.0)
-- Include proper tagging (Project, ManagedBy=Operra)
+- Include proper tagging (Project, ManagedBy=Operra, Environment)
 - Use variables for anything that should be configurable
 - EVERY variable MUST have a default value in variables.tf OR a value in terraform.tfvars
 - Do NOT use placeholder values like "CHANGEME" -- use real working defaults or omit
-- For SSH key pairs: use tls_private_key + aws key pair (let Terraform generate)
+- For SSH key pairs: use tls_private_key resource + aws_key_pair (let Terraform generate the key)
 - For passwords: use random_password resource from the random provider
-- Include outputs for: app URL, SSH command, static IP, and any credentials
+- Include outputs for: app_url, ssh_command, static_ip, ssh_private_key (sensitive), and any credentials (sensitive)
+- Mark sensitive outputs with sensitive = true
 - Do NOT include any markdown formatting or text outside the === FILE: === blocks
 "#,
         name = project.name,
