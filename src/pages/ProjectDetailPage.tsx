@@ -64,6 +64,7 @@ export function ProjectDetailPage() {
   const [cicdSecrets, setCicdSecrets] = useState<import("../lib/types").CiCdSecrets | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [destroying, setDestroying] = useState(false);
+  const [destroyConfirm, setDestroyConfirm] = useState(false);
   const [destroyResult, setDestroyResult] = useState<import("../lib/types").DestroyResult | null>(null);
 
   const [workflowOpen, setWorkflowOpen] = useState(true);
@@ -782,32 +783,57 @@ export function ProjectDetailPage() {
               {/* Destroy Infrastructure */}
               {(deployment?.status === "completed" || deployment?.status === "failed") && (
                 <div className="mt-4 pt-4 border-t border-gray-200">
-                  <button
-                    className="btn-danger w-full justify-center py-2.5 text-xs"
-                    onClick={() => {
-                      if (window.confirm("Destroy all infrastructure for this project? This will terminate servers, delete resources, and cannot be undone.")) {
-                        setDestroying(true);
-                        setDestroyResult(null);
-                        api.destroyInfrastructure(id!)
-                          .then((result) => {
-                            setDestroyResult(result);
-                            if (result.success) {
-                              setDeployment(null);
-                              setIacResult(null);
-                            }
-                          })
-                          .catch((e) => setDestroyResult({ success: false, output: String(e) }))
-                          .finally(() => setDestroying(false));
-                      }
-                    }}
-                    disabled={destroying}
-                  >
-                    {destroying ? (
-                      <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Destroying infrastructure...</>
-                    ) : (
-                      <><Trash2 className="h-3.5 w-3.5" /> Destroy Infrastructure</>
-                    )}
-                  </button>
+                  {!destroyConfirm ? (
+                    <button
+                      className="btn-danger w-full justify-center py-2.5 text-xs"
+                      onClick={() => setDestroyConfirm(true)}
+                      disabled={destroying}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Destroy Infrastructure
+                    </button>
+                  ) : (
+                    <div className="rounded-lg border-2 border-red-300 bg-red-50 p-4">
+                      <p className="text-sm font-semibold text-red-900 mb-1">
+                        Are you sure?
+                      </p>
+                      <p className="text-xs text-red-700 mb-3">
+                        This will terminate servers, delete all AWS resources, and cannot be undone.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="btn-danger text-xs px-4 py-2"
+                          onClick={() => {
+                            setDestroying(true);
+                            setDestroyConfirm(false);
+                            setDestroyResult(null);
+                            api.destroyInfrastructure(id!)
+                              .then((result) => {
+                                setDestroyResult(result);
+                                if (result.success) {
+                                  setDeployment(null);
+                                  setIacResult(null);
+                                }
+                              })
+                              .catch((e) => setDestroyResult({ success: false, output: String(e) }))
+                              .finally(() => setDestroying(false));
+                          }}
+                          disabled={destroying}
+                        >
+                          {destroying ? (
+                            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Destroying...</>
+                          ) : (
+                            "Yes, destroy everything"
+                          )}
+                        </button>
+                        <button
+                          className="btn-secondary text-xs px-4 py-2"
+                          onClick={() => setDestroyConfirm(false)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {destroyResult && (
                     <div className={`mt-3 rounded-lg border p-3 ${destroyResult.success ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}>
