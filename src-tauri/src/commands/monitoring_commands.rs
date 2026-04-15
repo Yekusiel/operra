@@ -67,23 +67,14 @@ pub struct CostSummary {
 // ── Helpers ──
 
 fn build_aws_cmd(args: &[&str], region: &str) -> Command {
-    if cfg!(windows) {
-        let aws_path = crate::tools::aws::resolve_aws_path_pub();
-        let mut cmd = Command::new("cmd");
-        cmd.arg("/C").arg(&aws_path);
-        for a in args { cmd.arg(a); }
-        cmd.arg("--region").arg(region);
-        cmd.arg("--output").arg("json");
-        cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
-        cmd
-    } else {
-        let mut cmd = Command::new("aws");
-        for a in args { cmd.arg(a); }
-        cmd.arg("--region").arg(region);
-        cmd.arg("--output").arg("json");
-        cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
-        cmd
-    }
+    let aws_path = crate::tools::aws::resolve_aws_path_pub();
+    // Use the AWS executable directly (not via cmd /C which breaks on spaces in paths)
+    let mut cmd = Command::new(&aws_path);
+    for a in args { cmd.arg(a); }
+    cmd.arg("--region").arg(region);
+    cmd.arg("--output").arg("json");
+    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd
 }
 
 async fn run_aws_cmd(args: &[&str], region: &str) -> Result<serde_json::Value, String> {
