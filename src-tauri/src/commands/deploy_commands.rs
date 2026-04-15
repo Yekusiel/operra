@@ -36,6 +36,15 @@ pub async fn generate_iac(
         let project = crate::models::project::Project::get_by_id(&conn, &project_id)
             .map_err(|e| e.to_string())?
             .ok_or("Project not found")?;
+
+        // Validate GitHub project has repo set
+        if project.source_type == "github" {
+            let repo = project.github_repo.as_deref().unwrap_or("");
+            if repo.is_empty() || !repo.contains('/') {
+                return Err("GitHub repository is not configured. Edit the project and set the owner/repo.".to_string());
+            }
+        }
+
         (plan, approved_option, project)
     };
 
@@ -153,7 +162,7 @@ COMMON GOTCHAS TO AVOID:
 - Do NOT use placeholder values like "CHANGEME" -- use real working defaults or omit
 - For SSH key pairs: use tls_private_key resource + aws_key_pair (let Terraform generate the key)
 - For passwords: use random_password resource from the random provider
-- Include outputs for: app_url, ssh_command, static_ip, ssh_private_key (sensitive), github_deploy_key_public, and any credentials (sensitive)
+- Include outputs for: app_url, ssh_command, static_ip, ssh_user (the SSH username, e.g., "ec2-user" for Amazon Linux, "ubuntu" for Ubuntu), ssh_private_key (sensitive), github_deploy_key_public, and any credentials (sensitive)
 - Mark sensitive outputs with sensitive = true
 - Do NOT include any markdown formatting or text outside the === FILE: === blocks
 "#,
@@ -266,12 +275,11 @@ COMMON GOTCHAS TO AVOID:
 /// For GitHub projects: <cwd>/infrastructure (since there's no local repo path)
 fn resolve_infra_dir(project: &crate::models::project::Project) -> PathBuf {
     if project.source_type == "github" || project.repo_path.is_empty() {
-        // Use current working directory for GitHub projects
         std::env::current_dir()
             .unwrap_or_else(|_| PathBuf::from("."))
             .join("infrastructure")
     } else {
-        resolve_infra_dir(&project)
+        PathBuf::from(&project.repo_path).join("infrastructure")
     }
 }
 
@@ -511,14 +519,19 @@ pub async fn run_tofu_plan(
 
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     if plan_result.success {
+        let plan_summary_text = if summary.to_create == 0 && summary.to_update == 0 && summary.to_destroy == 0 {
+            "No changes. Infrastructure is up-to-date.".to_string()
+        } else {
+            format!(
+                "{} to create, {} to update, {} to destroy",
+                summary.to_create, summary.to_update, summary.to_destroy
+            )
+        };
         Deployment::save_plan_output(
             &conn,
             &deployment.id,
             &combined_output,
-            &format!(
-                "{} to create, {} to update, {} to destroy",
-                summary.to_create, summary.to_update, summary.to_destroy
-            ),
+            &plan_summary_text,
             &summary.risk_level,
         )
         .map_err(|e| e.to_string())?;
@@ -630,12 +643,19 @@ pub async fn destroy_infrastructure(
     // Check if there's a state file with resources
     let state_file = infra_dir.join("terraform.tfstate");
     if state_file.exists() {
-        let content = std::fs::read_to_string(&state_file).unwrap_or_default();
-        if content.contains("\"resources\":[]") || content.contains("\"resources\": []") {
-            return Ok(DestroyResult {
-                success: true,
-                output: "No resources to destroy. Infrastructure is already clean.".to_string(),
-            });
+        if let Ok(content) = std::fs::read_to_string(&state_file) {
+            if let Ok(state) = serde_json::from_str::<serde_json::Value>(&content) {
+                let resources = state.get("resources")
+                    .and_then(|r| r.as_array())
+                    .map(|r| r.len())
+                    .unwrap_or(0);
+                if resources == 0 {
+                    return Ok(DestroyResult {
+                        success: true,
+                        output: "No resources to destroy. Infrastructure is already clean.".to_string(),
+                    });
+                }
+            }
         }
     }
 
@@ -773,8 +793,24 @@ pub async fn get_cicd_secrets(
     let ssh_key = get_tofu_output_sensitive(&infra_dir, "ssh_private_key").await
         .unwrap_or_else(|_| "Run: cd infrastructure && tofu output -raw ssh_private_key".to_string());
 
-    // Default to ubuntu -- this is correct for Ubuntu AMIs and Lightsail
-    let ssh_user = "ubuntu".to_string();
+    // Try to get SSH user from tofu output, fall back to ec2-user (Amazon Linux default)
+    let ssh_user = get_tofu_output_sensitive(&infra_dir, "ssh_user").await
+        .unwrap_or_else(|_| {
+            // Try to detect from the apply output
+            let conn_result = state.conn.lock();
+            if let Ok(conn) = conn_result {
+                if let Ok(deps) = Deployment::list_for_project(&conn, &project_id) {
+                    if let Some(dep) = deps.iter().find(|d| d.status == "completed") {
+                        if let Some(ref output) = dep.apply_output {
+                            if output.contains("amazon") || output.contains("amzn") || output.contains("al2023") {
+                                return "ec2-user".to_string();
+                            }
+                        }
+                    }
+                }
+            }
+            "ec2-user".to_string() // Default to ec2-user since we use Amazon Linux
+        });
 
     Ok(Some(CiCdSecrets {
         secrets_url: format!("https://github.com/{}/settings/secrets/actions", github_repo),
