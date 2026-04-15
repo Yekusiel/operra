@@ -16,8 +16,6 @@ import {
   Code2,
   Rocket,
   Shield,
-  ChevronDown,
-  ChevronRight,
   RotateCcw,
   Settings2,
   Activity,
@@ -69,7 +67,6 @@ export function ProjectDetailPage() {
   const [destroyConfirm, setDestroyConfirm] = useState(false);
   const [destroyResult, setDestroyResult] = useState<import("../lib/types").DestroyResult | null>(null);
 
-  const [workflowOpen, setWorkflowOpen] = useState(true);
 
   const hasCompletedScan = scans?.some((s) => s.status === "completed");
   const hasCompletedQuestionnaire = questionnaire?.completed;
@@ -292,22 +289,10 @@ export function ProjectDetailPage() {
 
         {/* Workflow */}
         <div className="card">
-          <button
-            className="flex w-full items-center justify-between"
-            onClick={() => setWorkflowOpen(!workflowOpen)}
-          >
-            <h2 className="text-sm font-semibold text-gray-900">
-              Infrastructure Workflow
-            </h2>
-            {workflowOpen ? (
-              <ChevronDown className="h-4 w-4 text-gray-400" />
-            ) : (
-              <ChevronRight className="h-4 w-4 text-gray-400" />
-            )}
-          </button>
-
-          {workflowOpen && (
-            <div className="mt-4 space-y-3">
+          <h2 className="mb-4 text-sm font-semibold text-gray-900">
+            Infrastructure Workflow
+          </h2>
+          <div className="space-y-3">
               {/* Step 1: Scan */}
               <WorkflowStep
                 step={1}
@@ -341,7 +326,11 @@ export function ProjectDetailPage() {
 
               {/* Scan history (nested under step 1) */}
               {scans && scans.length > 0 && (
-                <div className="ml-12 space-y-1.5">
+                <details className="ml-12">
+                  <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-700 mb-1.5">
+                    {scans.length} scan{scans.length > 1 ? "s" : ""} — click to expand
+                  </summary>
+                <div className="space-y-1.5">
                   {scans.map((s) => (
                     <Link
                       key={s.id}
@@ -375,6 +364,7 @@ export function ProjectDetailPage() {
                     </Link>
                   ))}
                 </div>
+                </details>
               )}
 
               {/* Step 2: Questionnaire */}
@@ -533,14 +523,19 @@ export function ProjectDetailPage() {
 
               {/* IaC Result inline */}
               {iacResult && (
-                <div className="ml-12 rounded-lg border border-green-200 bg-green-50 p-3">
-                  <p className="text-xs text-green-700 font-mono mb-1.5">{iacResult.dir}</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {iacResult.files.map((f) => (
-                      <span key={f} className="badge-green font-mono text-[10px]">{f}</span>
-                    ))}
+                <details className="ml-12">
+                  <summary className="text-xs text-green-700 cursor-pointer hover:text-green-900 mb-1.5">
+                    {iacResult.files.length} file{iacResult.files.length > 1 ? "s" : ""} generated — click to expand
+                  </summary>
+                  <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                    <p className="text-xs text-green-700 font-mono mb-1.5">{iacResult.dir}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {iacResult.files.map((f) => (
+                        <span key={f} className="badge-green font-mono text-[10px]">{f}</span>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                </details>
               )}
 
               {/* Deploy Key (shown automatically after IaC generation for GitHub projects) */}
@@ -884,12 +879,13 @@ export function ProjectDetailPage() {
                 </div>
               )}
             </div>
-          )}
+          </div>
         </div>
-      </div>
     </>
   );
 }
+
+
 
 function WorkflowStep({
   step,
