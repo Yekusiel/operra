@@ -64,6 +64,16 @@ fn system_setup(config: &ProvisioningConfig) -> String {
     format!(r#"# ---------- System setup ----------
 export DEBIAN_FRONTEND=noninteractive
 
+# Create swap space (safety net for builds on small instances)
+if [ ! -f /swapfile ]; then
+    fallocate -l 2G /swapfile
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+    echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    echo "Swap enabled: 2GB"
+fi
+
 # Detect OS
 if command -v apt-get &>/dev/null; then
     PKG_MANAGER="apt"

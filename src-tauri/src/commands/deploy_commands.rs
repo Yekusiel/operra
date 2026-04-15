@@ -137,10 +137,12 @@ CRITICAL -- Provisioning (setup.sh):
 
 {domain_instructions}
 
-AMI Requirements:
+Instance Requirements:
 - MUST use Ubuntu 22.04 or 24.04 LTS (the setup.sh is written for apt-based systems)
 - Use data.aws_ami to find the latest Ubuntu AMI for the correct architecture
 - The SSH user for Ubuntu AMIs is "ubuntu" -- output this as ssh_user
+- Minimum instance size: t4g.small (2 vCPU, 2 GB RAM) -- Next.js builds need at least 2GB
+- Do NOT use t4g.micro or t4g.nano -- builds will OOM and crash
 
 COMMON GOTCHAS TO AVOID:
 - ONLY use resource types from the Valid AWS Resource Types list above -- no exceptions
