@@ -362,24 +362,26 @@ fn write_iac_file(output_dir: &Path, filename: &str, content: &str) -> Result<()
     }
 
     let path = output_dir.join(&safe_name);
-    // Strip markdown code fences the AI might wrap content in
+    // Strip markdown code fences and any trailing commentary from AI
     let trimmed = content.trim();
     let cleaned_owned: String;
     let cleaned = if trimmed.starts_with("```") {
-        // Remove the entire first line (```bash, ```hcl, etc.) and trailing ```
-        cleaned_owned = trimmed
-            .lines()
-            .skip(1) // Skip the opening ``` line entirely
-            .collect::<Vec<_>>()
-            .join("\n");
-        let c = cleaned_owned.trim();
-        if c.ends_with("```") {
-            c[..c.len() - 3].trim()
-        } else {
-            c
-        }
+        // Remove opening fence line, and everything from closing fence onward
+        let lines: Vec<&str> = trimmed.lines().skip(1).collect(); // skip opening ```
+        // Find the closing ``` line and take only lines before it
+        let end = lines.iter().position(|l| l.trim() == "```").unwrap_or(lines.len());
+        cleaned_owned = lines[..end].join("\n");
+        cleaned_owned.trim()
     } else {
-        trimmed
+        // Even without opening fence, check for trailing ``` with commentary
+        let lines: Vec<&str> = trimmed.lines().collect();
+        let end = lines.iter().position(|l| l.trim() == "```").unwrap_or(lines.len());
+        if end < lines.len() {
+            cleaned_owned = lines[..end].join("\n");
+            cleaned_owned.trim()
+        } else {
+            trimmed
+        }
     };
     if !cleaned.is_empty() {
         std::fs::write(&path, cleaned)
