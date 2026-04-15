@@ -8,6 +8,8 @@ use crate::provisioning;
 use crate::tools::aws_resources;
 use crate::tools::tofu;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use tokio::process::Command;
 
 #[derive(serde::Serialize)]
 pub struct IacGenerationResult {
@@ -440,22 +442,93 @@ Start with "name:" and end with the last line of the YAML.
         .trim()
         .to_string();
 
-    // Write to .github/workflows/deploy.yml relative to repo root
-    let repo_root = if project.source_type == "github" && !project.repo_path.is_empty() {
-        PathBuf::from(&project.repo_path)
+    // Write workflow file
+    if project.source_type == "github" {
+        // For GitHub projects: write to infrastructure dir and push to repo via git
+        let infra_dir = resolve_infra_dir(project);
+        let workflow_path = infra_dir.join("deploy.yml");
+        std::fs::write(&workflow_path, &yaml)
+            .map_err(|e| format!("Failed to write deploy.yml: {}", e))?;
+
+        // Try to push the workflow to the GitHub repo directly
+        let ssh_key_path = infra_dir.join("deploy_key");
+        if ssh_key_path.exists() {
+            let repo_url = format!("git@github.com:{}.git", repo);
+            let temp_dir = std::env::temp_dir().join(format!("operra-cicd-{}", project.name));
+            let _ = std::fs::remove_dir_all(&temp_dir);
+
+            // Set up SSH for git
+            let git_ssh_cmd = format!(
+                "ssh -i {} -o StrictHostKeyChecking=no",
+                ssh_key_path.to_string_lossy()
+            );
+
+            let clone_result = if cfg!(windows) {
+                Command::new("cmd")
+                    .args(["/C", "git", "clone", "--depth", "1", "--branch", branch, &repo_url])
+                    .arg(temp_dir.to_string_lossy().as_ref())
+                    .env("GIT_SSH_COMMAND", &git_ssh_cmd)
+                    .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped())
+                    .output().await
+            } else {
+                Command::new("git")
+                    .args(["clone", "--depth", "1", "--branch", branch, &repo_url])
+                    .arg(temp_dir.to_string_lossy().as_ref())
+                    .env("GIT_SSH_COMMAND", &git_ssh_cmd)
+                    .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped())
+                    .output().await
+            };
+
+            if let Ok(out) = clone_result {
+                if out.status.success() {
+                    // Write workflow file into cloned repo
+                    let wf_dir = temp_dir.join(".github").join("workflows");
+                    let _ = std::fs::create_dir_all(&wf_dir);
+                    let _ = std::fs::write(wf_dir.join("deploy.yml"), &yaml);
+
+                    // Commit and push
+                    let git_ops = format!(
+                        "cd \"{}\" && git add .github/workflows/deploy.yml && git commit -m \"Add Operra CI/CD deploy workflow\" && git push",
+                        temp_dir.to_string_lossy()
+                    );
+
+                    let push_result = if cfg!(windows) {
+                        Command::new("cmd")
+                            .args(["/C", &git_ops])
+                            .env("GIT_SSH_COMMAND", &git_ssh_cmd)
+                            .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped())
+                            .output().await
+                    } else {
+                        Command::new("sh")
+                            .args(["-c", &git_ops])
+                            .env("GIT_SSH_COMMAND", &git_ssh_cmd)
+                            .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped())
+                            .output().await
+                    };
+
+                    if let Ok(p) = push_result {
+                        if p.status.success() {
+                            let _ = std::fs::remove_dir_all(&temp_dir);
+                            return Ok(".github/workflows/deploy.yml (pushed to repo)".to_string());
+                        }
+                    }
+                }
+            }
+            let _ = std::fs::remove_dir_all(&temp_dir);
+        }
+
+        Ok("deploy.yml (saved locally -- add to your repo's .github/workflows/)".to_string())
     } else {
-        PathBuf::from(&project.repo_path)
-    };
-
-    let workflows_dir = repo_root.join(".github").join("workflows");
-    std::fs::create_dir_all(&workflows_dir)
-        .map_err(|e| format!("Failed to create .github/workflows: {}", e))?;
-
-    let workflow_path = workflows_dir.join("deploy.yml");
-    std::fs::write(&workflow_path, &yaml)
-        .map_err(|e| format!("Failed to write deploy.yml: {}", e))?;
-
-    Ok(".github/workflows/deploy.yml".to_string())
+        // For local projects: write directly to the repo
+        let repo_root = PathBuf::from(&project.repo_path);
+        let workflows_dir = repo_root.join(".github").join("workflows");
+        std::fs::create_dir_all(&workflows_dir)
+            .map_err(|e| format!("Failed to create .github/workflows: {}", e))?;
+        let workflow_path = workflows_dir.join("deploy.yml");
+        std::fs::write(&workflow_path, &yaml)
+            .map_err(|e| format!("Failed to write deploy.yml: {}", e))?;
+        Ok(".github/workflows/deploy.yml".to_string())
+    }
 }
 
 // ── Deployment Commands ──

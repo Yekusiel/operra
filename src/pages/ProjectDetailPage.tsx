@@ -571,7 +571,7 @@ export function ProjectDetailPage() {
                     </button>
                   </div>
                   <p className="text-[10px] text-orange-600 mt-2">
-                    Title it "Operra Deploy Key" on GitHub. Read-only access is sufficient.
+                    Title it "Operra Deploy Key" on GitHub. Check "Allow write access" so Operra can push the CI/CD workflow.
                   </p>
                 </div>
               )}
