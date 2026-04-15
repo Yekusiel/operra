@@ -18,8 +18,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd ~/givinity
-            git fetch origin main
-            git reset --hard origin/main
-            npm ci
+            git pull origin main
+            npm install --production
             npm run build
             pm2 restart givinity || pm2 start npm --name "givinity" -- start

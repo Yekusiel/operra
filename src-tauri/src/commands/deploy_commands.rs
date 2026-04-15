@@ -113,7 +113,10 @@ CRITICAL -- Application Provisioning:
   6. Configure a reverse proxy (Caddy preferred -- auto-HTTPS, simpler than Nginx) on port 80/443
   7. The app should be accessible via HTTP immediately after provisioning
 - The user_data script should be a complete bash script, not a skeleton
-- Use double-dollar ($$) for bash variables inside heredoc to avoid Terraform interpolation conflicts
+- For user_data, use a quoted heredoc to prevent Terraform interpolation: user_data = <<-'USERDATA' ... USERDATA
+- Inside the quoted heredoc, use normal bash syntax with single $ signs (NOT $$)
+- If you need to pass Terraform variables into the script, use templatestring() or set them as environment variables via a separate mechanism (e.g., write a config file from Terraform, then source it in the script)
+- Alternatively, use a simple approach: hardcode values directly in the script using Terraform interpolation OUTSIDE the heredoc, then concatenate
 
 {domain_instructions}
 

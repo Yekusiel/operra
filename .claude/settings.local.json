@@ -2,7 +2,20 @@
   "permissions": {
     "allow": [
       "Bash(npx tsc:*)",
-      "Bash(cargo check:*)"
+      "Bash(cargo check:*)",
+      "Bash(node -e \"const s=require\\('fs'\\).readFileSync\\(0,'utf8'\\);try{const j=JSON.parse\\(s\\);console.log\\('Resources:',j.resources.length\\);const ip=j.outputs?.static_ip||j.outputs?.elastic_ip||j.outputs?.app_url;console.log\\('IP/URL:',JSON.stringify\\(ip\\)\\)}catch\\(e\\){console.log\\('No state'\\)}\")",
+      "Bash(cmd //c \"\\\\\"C:\\\\\\\\Program Files\\\\\\\\Amazon\\\\\\\\AWSCLIV2\\\\\\\\aws.exe\\\\\" ec2 describe-instances --filters Name=tag:Project,Values=givinity Name=instance-state-name,Values=running --query \\\\\"Reservations[].Instances[].[InstanceId,PublicIpAddress,Tags[?Key==\\\\`Name\\\\`].Value|[0]]\\\\\" --output text --region us-east-1\")",
+      "Bash(cmd //c \"C:\\\\Program Files\\\\Amazon\\\\AWSCLIV2\\\\aws.exe\" ec2 describe-instances --filters \"Name=instance-state-name,Values=running\" --query \"Reservations[].Instances[].[InstanceId,PublicIpAddress,InstanceType,Tags[?Key==\\\\`Name\\\\`].Value|[0]]\" --output table --region us-east-1)",
+      "Bash(\"C:/Program Files/Amazon/AWSCLIV2/aws.exe\" ec2 describe-instances --filters \"Name=instance-state-name,Values=running\" --query \"Reservations[].Instances[].[InstanceId,PublicIpAddress,InstanceType]\" --output text --region us-east-1)",
+      "Bash(\"C:/Program Files/Amazon/AWSCLIV2/aws.exe\" ec2 describe-instances --filters \"Name=instance-state-name,Values=running\" --query \"Reservations[].Instances[].{ID:InstanceId,IP:PublicIpAddress,Type:InstanceType,Name:Tags[?Key=='Name']|[0].Value,Project:Tags[?Key=='Project']|[0].Value}\" --output table --region us-east-1)",
+      "Bash(\"C:/Program Files/Amazon/AWSCLIV2/aws.exe\" ec2 describe-instances --filters \"Name=instance-state-name,Values=running\" --query \"Reservations[].Instances[].{ID:InstanceId,IP:PublicIpAddress,Name:Tags[?Key=='Name']|[0].Value,Type:InstanceType}\" --output table --region us-east-2)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} - %{time_total}s\" http://3.21.70.246 --connect-timeout 5)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\" http://3.21.70.246:3000 --connect-timeout 5)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\" https://3.21.70.246 --connect-timeout 5 -k)",
+      "Read(//c/Users/yekus/givinity/**)",
+      "Bash(node -e ':*)",
+      "Bash(\"C:/Program Files/Amazon/AWSCLIV2/aws.exe\" ec2 describe-instances --instance-ids i-00a95d92cc64d4875 --query \"Reservations[].Instances[].{KeyName:KeyName,ImageId:ImageId,Platform:PlatformDetails}\" --output table --region us-east-2)",
+      "Bash(\"C:/Program Files/Amazon/AWSCLIV2/aws.exe\" ec2 describe-images --image-ids ami-0552ed83caf3e6be5 --query \"Images[].{Name:Name,Desc:Description}\" --output text --region us-east-2)"
     ]
   }
 }
