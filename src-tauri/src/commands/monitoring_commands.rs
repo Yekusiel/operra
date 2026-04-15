@@ -353,12 +353,18 @@ pub async fn get_cost_summary(
     state: tauri::State<'_, AppDb>,
     project_id: String,
 ) -> Result<CostSummary, String> {
-    let _project = get_project_blocking(&state, &project_id)?;
+    let project = get_project_blocking(&state, &project_id)?;
 
     let now = chrono::Utc::now();
-    let start = now.format("%Y-%m-01").to_string(); // First of current month
+    let start = now.format("%Y-%m-01").to_string();
     let end = (now + chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
     let period = format!("Start={},End={}", start, end);
+
+    // Filter by Project tag to only show this project's costs
+    let tag_filter = format!(
+        r#"{{"Tags":{{"Key":"Project","Values":["{}"],"MatchOptions":["EQUALS"]}}}}"#,
+        project.name
+    );
 
     // Cost Explorer API is always in us-east-1
     let result = run_aws_cmd(
@@ -366,7 +372,8 @@ pub async fn get_cost_summary(
           "--time-period", &period,
           "--granularity", "MONTHLY",
           "--metrics", "UnblendedCost",
-          "--group-by", "Type=DIMENSION,Key=SERVICE"],
+          "--group-by", "Type=DIMENSION,Key=SERVICE",
+          "--filter", &tag_filter],
         "us-east-1",
     ).await?;
 
