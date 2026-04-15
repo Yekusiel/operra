@@ -19,6 +19,10 @@ pub struct AwsConnectionResult {
     pub error: Option<String>,
 }
 
+pub fn resolve_aws_path_pub() -> String {
+    resolve_aws_path()
+}
+
 fn resolve_aws_path() -> String {
     if cfg!(windows) {
         // AWS CLI v2 installs to Program Files but often isn't in PATH

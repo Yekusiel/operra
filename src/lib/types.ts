@@ -398,6 +398,56 @@ export interface DnsInstructions {
   instructions: string;
 }
 
+// ── Monitoring ──
+
+export interface InstanceStatus {
+  state: string;
+  instance_id: string;
+  instance_type: string;
+  public_ip: string;
+  launch_time: string;
+  availability_zone: string;
+}
+
+export interface AppHealth {
+  healthy: boolean;
+  status_code: number;
+  response_ms: number;
+  url: string;
+  checked_at: string;
+}
+
+export interface MetricDatapoint {
+  timestamp: string;
+  value: number;
+}
+
+export interface CloudWatchMetrics {
+  metric_name: string;
+  datapoints: MetricDatapoint[];
+  unit: string;
+}
+
+export interface ContainerInfo {
+  name: string;
+  image: string;
+  status: string;
+  ports: string;
+}
+
+export interface ServiceCost {
+  service: string;
+  amount: string;
+}
+
+export interface CostSummary {
+  total: string;
+  currency: string;
+  period_start: string;
+  period_end: string;
+  by_service: ServiceCost[];
+}
+
 // ── Constants ──
 
 export const AWS_REGIONS = [

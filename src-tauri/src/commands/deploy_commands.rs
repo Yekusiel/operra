@@ -305,7 +305,7 @@ COMMON GOTCHAS TO AVOID:
 /// Resolve the infrastructure directory for a project.
 /// For local projects: <repo_path>/infrastructure
 /// For GitHub projects: <cwd>/infrastructure (since there's no local repo path)
-fn resolve_infra_dir(project: &crate::models::project::Project) -> PathBuf {
+pub fn resolve_infra_dir(project: &crate::models::project::Project) -> PathBuf {
     if project.source_type == "github" || project.repo_path.is_empty() {
         std::env::current_dir()
             .unwrap_or_else(|_| PathBuf::from("."))
@@ -935,6 +935,10 @@ fn extract_ssh_user_from_command(output: &str) -> Option<String> {
         .and_then(|l| l.split('@').next())
         .and_then(|l| l.split_whitespace().last())
         .map(|u| u.to_string())
+}
+
+pub async fn get_tofu_output_sensitive_pub(infra_dir: &std::path::Path, key: &str) -> Result<String, String> {
+    get_tofu_output_sensitive(infra_dir, key).await
 }
 
 async fn get_tofu_output_sensitive(infra_dir: &Path, key: &str) -> Result<String, String> {

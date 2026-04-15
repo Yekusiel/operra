@@ -67,6 +67,12 @@ pub fn run() {
             commands::deploy_commands::get_deployment,
             commands::deploy_commands::list_deployments,
             commands::deploy_commands::destroy_infrastructure,
+            // Monitoring
+            commands::monitoring_commands::get_instance_status,
+            commands::monitoring_commands::get_app_health,
+            commands::monitoring_commands::get_cloudwatch_metrics,
+            commands::monitoring_commands::get_container_status,
+            commands::monitoring_commands::get_cost_summary,
             commands::deploy_commands::get_dns_instructions,
             commands::deploy_commands::get_deploy_key_info,
             commands::deploy_commands::get_cicd_secrets,

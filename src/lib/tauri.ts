@@ -20,6 +20,11 @@ import type {
   DeployKeyInfo,
   DnsInstructions,
   CiCdSecrets,
+  InstanceStatus,
+  AppHealth,
+  CloudWatchMetrics,
+  ContainerInfo,
+  CostSummary,
 } from "./types";
 
 // ── Projects ──
@@ -167,3 +172,20 @@ export const getDnsInstructions = (projectId: string) =>
 
 export const getCicdSecrets = (projectId: string) =>
   invoke<CiCdSecrets | null>("get_cicd_secrets", { projectId });
+
+// ── Monitoring ──
+
+export const getInstanceStatus = (projectId: string) =>
+  invoke<InstanceStatus>("get_instance_status", { projectId });
+
+export const getAppHealth = (projectId: string) =>
+  invoke<AppHealth>("get_app_health", { projectId });
+
+export const getCloudWatchMetrics = (projectId: string, metricName: string, hours: number) =>
+  invoke<CloudWatchMetrics>("get_cloudwatch_metrics", { projectId, metricName, hours });
+
+export const getContainerStatus = (projectId: string) =>
+  invoke<ContainerInfo[]>("get_container_status", { projectId });
+
+export const getCostSummary = (projectId: string) =>
+  invoke<CostSummary>("get_cost_summary", { projectId });
